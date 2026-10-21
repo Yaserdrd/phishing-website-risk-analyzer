@@ -1,0 +1,43 @@
+name: UCI URL model evaluation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/uci-domain-evaluation]
+    paths:
+      - '.github/workflows/train-uci.yml'
+      - 'src/**'
+      - 'scripts/**'
+      - 'requirements-train.txt'
+
+jobs:
+  train-evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Run unit tests first
+        run: PYTHONPATH=src pytest -q
+      - name: Download original UCI PhiUSIIL dataset 967
+        run: python scripts/download_uci.py
+      - name: Train and evaluate domain-disjoint URL model
+        run: python scripts/train_model.py --csv data/phiusiil_urls.csv
+      - name: Print and validate saved report
+        run: python scripts/verify_report.py models/url_model_meta.json
+      - name: Publish reproducible report + model files as workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: uci-phiusiil-domain-disjoint-evaluation
+          path: |
+            models/url_model_meta.json
+            models/url_phishing_model.pkl
+          if-no-files-found: error
+          retention-days: 7
