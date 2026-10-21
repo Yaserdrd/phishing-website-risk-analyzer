@@ -4,7 +4,7 @@ import pytest
 
 from phishing_analyzer.model import (
     load_csv, load_model, train, predict, choose_thresholds,
-    selective_labels, _split_by_domain,
+    selective_labels, widen_uncertainty_band, _split_by_domain,
 )
 from phishing_analyzer.urls import domain_group
 
@@ -83,7 +83,7 @@ def test_train_and_load_smoke(tmp_path):
     meta = train(frame, tmp_path / "models", url_features=500, host_features=300)
     model, loaded = load_model(tmp_path / "models")
     assert model is not None
-    assert loaded["version"] == "2.0.0"
+    assert loaded["version"] == "2.1.0"
     assert loaded["legitimate_threshold"] < loaded["phishing_threshold"]
     metrics = loaded["metrics"]
     assert "selective" in metrics
@@ -95,3 +95,27 @@ def test_train_and_load_smoke(tmp_path):
     result = predict("https://example.net", model, loaded)
     assert result["label"] in {"PHISHING", "LEGITIMATE", "UNCERTAIN"}
     assert 0 <= result["probability"] <= 1
+
+def test_conservative_abstention_band():
+    scores = np.linspace(.01, .99, 100)
+    low, high = widen_uncertainty_band(scores, .4, .4 + 1e-9, target_abstention=.1)
+    assert low <= .4 < high
+    labels = selective_labels(scores, low, high)
+    assert np.mean(labels == "UNCERTAIN") >= .1
+
+
+def test_conservative_band_invalid_values():
+    with pytest.raises(ValueError):
+        widen_uncertainty_band([float("nan")], .1, .2)
+    with pytest.raises(ValueError):
+        widen_uncertainty_band([.2, .5], .2, .1)
+
+
+def test_training_uses_validation_to_expand_abstention(tmp_path):
+    file = tmp_path / "synthetic.csv"
+    sample_frame().to_csv(file, index=False)
+    report = train(load_csv(file), tmp_path / "model", url_features=500, host_features=300)
+    assert report["target_validation_abstention"] == .05
+    assert report["validation_uncertain_count"] >= 1
+    assert report["validation_coverage"] <= .95
+    assert report["base_validation_thresholds"]["phishing"] <= report["phishing_threshold"]
