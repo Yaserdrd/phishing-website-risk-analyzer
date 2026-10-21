@@ -5,7 +5,7 @@
 This project evolved from a Jupyter/Google Colab experiment comparing **Decision Tree**, **Random Forest**, and a **Keras neural network** on the UCI Phishing Websites dataset (ID 327). Its current application uses a **separate URL-text model** based on the UCI PhiUSIIL Phishing URL dataset (ID 967), complemented by URL heuristics and **optional** TLS, RDAP, and HTML checks.
 
 > [!WARNING]
-> This is a research prototype, **not a browser protection product**. A low risk score does not establish safety. The combined 0–100 score is heuristic, **not** a calibrated phishing probability. No trained model is shipped, and final URL-model performance has **not been verified** in this distribution.
+> This is a research prototype, **not a browser protection product**. A low risk score does not establish safety. The combined 0–100 score is heuristic, **not** a calibrated phishing probability. No trained model is shipped. UCI holdout results have been reproduced in GitHub Actions, but independent contemporary real-world performance has **not** been verified.
 
 ## Highlights
 
@@ -21,7 +21,7 @@ This project evolved from a Jupyter/Google Colab experiment comparing **Decision
 Requires **Python 3.10+** and a working internet connection to install packages. Training requires downloading an external public dataset.
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/phishing-website-risk-analyzer.git
+git clone https://github.com/Yaserdrd/phishing-website-risk-analyzer.git
 cd phishing-website-risk-analyzer
 python -m venv .venv
 # Windows PowerShell:
@@ -49,7 +49,7 @@ The training script accepts any CSV with these columns:
 | `URL` | Full HTTP(S) URL |
 | `label` | `0`: phishing; `1`: legitimate |
 
-Malformed URLs are excluded during CSV preparation, with duplicate normalized URLs removed; contradictory labels for the same normalized URL trigger an error.
+Malformed URLs are excluded during CSV preparation, with duplicate normalized URLs removed; contradictory labels for the same normalized URL are quarantined and counted in the cleaning report.
 
 `train_model.py` writes `models/url_phishing_model.pkl` and `models/url_model_meta.json`, including validation decision thresholds, URL cleaning audit, domain split counts, selective three-way test metrics, PR-AUC, and clearly labelled forced-binary baseline metrics. Both files are **ignored by git**. Only load model artifacts you trained yourself; Python `joblib` serialization can execute code when loading untrusted files.
 
@@ -140,3 +140,10 @@ Bu proje oltalama (phishing) bağlantılarını analiz eden **eğitim amaçlı b
 The second-stage URL model now uses **registrable-domain-disjoint fit/validation/test sets**, logs contradictory-label exclusions, and reports three-way selective risk decisions separately from forced binary classification. No model is refitted after selecting validation thresholds, and synthetic root domains are not added to the labelled dataset. See [evaluation methodology](docs/MODEL_EVALUATION.md).
 
 A dedicated **[UCI URL model evaluation](.github/workflows/train-uci.yml)** workflow downloads dataset ID 967, runs tests, trains the model, prints the actual held-out metrics and retains the model/report as a short-lived GitHub Actions artifact. Reported results must come from a successful run; no UCI test score is claimed merely because the source code compiles or synthetic tests pass.
+
+
+## Verified v2.1 UCI selective results (2026-10-21)
+
+The [successful UCI training run](https://github.com/Yaserdrd/phishing-website-risk-analyzer/actions/runs/39684966827) evaluated 51,690 domain-disjoint holdout URLs. The **validation-selected** uncertain band left 2,033 test URLs (**3.93%**) undecided. Accuracy **among the remaining 96.07% of URLs** was **99.074%**; legitimate-site false-alert rate was **1.484%**, and the phishing false-clear rate was **0.239%** (denominators include all URLs of the respective true class). These are dataset-specific estimates, **not real-world protection guarantees**.
+
+See [verified v2.1 report](docs/VERIFIED_RESULTS_V21_2026-10-21.md) and [machine-readable JSON](reports/uci_phiusiil_selective_v21_2026-10-21.json). No model pickle is checked in; the application still runs in heuristic demo mode unless you install a trusted trained model locally. A fresh, independent external dataset is required before a production claim.
