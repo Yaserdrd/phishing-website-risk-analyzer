@@ -10,7 +10,7 @@ This project evolved from a Jupyter/Google Colab experiment comparing **Decision
 ## Highlights
 
 - **URL text model:** TF-IDF character n-grams (full URL + hostname) and Logistic Regression.
-- **Leakage-aware evaluation:** `GroupShuffleSplit` by normalized hostname. Validation selects a high phishing threshold independently of the held-out test set. *Note: grouping by hostname does not fully isolate related subdomains of one registrable domain.*
+- **Domain-disjoint evaluation (v2):** `GroupShuffleSplit` by registrable domain (eTLD+1 using the Public Suffix List), with fit / validation / held-out test partitions. Sibling subdomains are kept together. Validation independently selects both decision thresholds; test data are untouched until final scoring.
 - **Three-way output:** `PHISHING` / `UNCERTAIN` / `LEGITIMATE` with independently recorded thresholds.
 - **Transparent risk breakdown:** URL heuristics plus optional live TLS, RDAP, HTML analysis. Live lookups are OFF by default.
 - **SSRF precautions:** active requests accept only HTTP/HTTPS on ports 80/443, reject private/reserved DNS results, connect to a validated pinned public IP, and revalidate every redirect. Bounded response body, redirect count and socket timeouts.
@@ -21,7 +21,7 @@ This project evolved from a Jupyter/Google Colab experiment comparing **Decision
 Requires **Python 3.10+** and a working internet connection to install packages. Training requires downloading an external public dataset.
 
 ```bash
-git clone https://github.com/Yaserdrd/phishing-website-risk-analyzer.git
+git clone https://github.com/YOUR_USERNAME/phishing-website-risk-analyzer.git
 cd phishing-website-risk-analyzer
 python -m venv .venv
 # Windows PowerShell:
@@ -51,7 +51,7 @@ The training script accepts any CSV with these columns:
 
 Malformed URLs are excluded during CSV preparation, with duplicate normalized URLs removed; contradictory labels for the same normalized URL trigger an error.
 
-`train_model.py` writes `models/url_phishing_model.pkl` and `models/url_model_meta.json`, including the validation decision thresholds and held-out test metrics. Both files are **ignored by git**. Only load model artifacts you trained yourself; Python `joblib` serialization can execute code when loading untrusted files.
+`train_model.py` writes `models/url_phishing_model.pkl` and `models/url_model_meta.json`, including validation decision thresholds, URL cleaning audit, domain split counts, selective three-way test metrics, PR-AUC, and clearly labelled forced-binary baseline metrics. Both files are **ignored by git**. Only load model artifacts you trained yourself; Python `joblib` serialization can execute code when loading untrusted files.
 
 Re-running on the full dataset can take time. The default feature dimensions and evaluation parameters are documented in `src/phishing_analyzer/model.py`.
 
@@ -120,7 +120,7 @@ tests/                          Automated checks
 ## Limitations and roadmap
 
 1. Training data can age; evaluate on recent phishing attempts before deployment.
-2. Hostname grouping leaves potential leakage across sibling subdomains; future training should split by **registrable domain** using the Public Suffix List.
+2. Registrable-domain grouping eliminates sibling-domain overlap; temporal holdouts and fresh external datasets are still needed for robust real-world conclusions.
 3. Validation/test metrics do not prove the system works on novel real-world websites. Scores and thresholds are not necessarily probability-calibrated.
 4. Network/TLS/RDAP failures often indicate missing evidence rather than attacks; use care when interpreting live-check outputs.
 5. Form actions, iframes, passwords and external links are weak individual phishing indicators. Treat findings as context, not definitive evidence.
@@ -134,3 +134,9 @@ Analyze links you are authorized to assess. Never submit credentials or secret t
 ## Türkçe özet
 
 Bu proje oltalama (phishing) bağlantılarını analiz eden **eğitim amaçlı bir prototiptir**. URL metninden özellik çıkararak makine öğrenmesi tahmini üretir; ek olarak isteğe bağlı TLS, RDAP ve HTML kontrolleri sunar. Eğitimli model dosyası bulunmadığında uygulama bunu açıkça bildirerek yalnızca kural tabanlı demo çalıştırır. **Düşük risk puanı güvenlik garantisi değildir.**
+
+## Reproducible 2026 model-evaluation upgrade
+
+The second-stage URL model now uses **registrable-domain-disjoint fit/validation/test sets**, logs contradictory-label exclusions, and reports three-way selective risk decisions separately from forced binary classification. No model is refitted after selecting validation thresholds, and synthetic root domains are not added to the labelled dataset. See [evaluation methodology](docs/MODEL_EVALUATION.md).
+
+A dedicated **[UCI URL model evaluation](.github/workflows/train-uci.yml)** workflow downloads dataset ID 967, runs tests, trains the model, prints the actual held-out metrics and retains the model/report as a short-lived GitHub Actions artifact. Reported results must come from a successful run; no UCI test score is claimed merely because the source code compiles or synthetic tests pass.
