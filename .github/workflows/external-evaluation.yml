@@ -1,0 +1,54 @@
+name: Independent URL source audit
+on:
+  workflow_dispatch:
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install training and test requirements
+        run: python -m pip install -r requirements-dev.txt
+      - name: Run tests before external evaluation
+        run: PYTHONPATH=src pytest -q
+      - name: Load trusted model from successful v2.1 UCI workflow
+        run: |
+          mkdir -p models
+          gh run download 39684966827 --repo "${{ github.repository }}" --name uci-phiusiil-domain-disjoint-evaluation --dir models
+          test -s models/url_phishing_model.pkl
+          test -s models/url_model_meta.json
+      - name: Download original UCI domains for overlap filter
+        run: python scripts/download_uci.py
+      - name: Acquire public provider snapshots
+        run: |
+          mkdir -p data/external
+          curl --fail --location --silent --show-error --max-time 90 --max-filesize 20000000 \
+            --user-agent "PhishingRiskResearch/1.0" \
+            "https://data.phishtank.com/data/online-valid.csv.gz" -o data/external/online-valid.csv.gz
+          curl --fail --location --silent --show-error --max-time 90 --max-filesize 20000000 \
+            --user-agent "PhishingRiskResearch/1.0" \
+            "https://tranco-list.eu/top-1m.csv.zip" -o data/external/tranco.zip
+          test -s data/external/online-valid.csv.gz
+          test -s data/external/tranco.zip
+      - name: Evaluate source-separated URL strings (no URL visits)
+        run: |
+          PYTHONPATH=src python scripts/evaluate_external.py \
+            --uci-csv data/phiusiil_urls.csv \
+            --phishing-csv data/external/online-valid.csv.gz \
+            --popular-zip data/external/tranco.zip \
+            --sample 2000 --out reports/external_audit.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: external-audit-metrics-only
+          path: reports/external_audit.json
+          if-no-files-found: error
+          retention-days: 14
