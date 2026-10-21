@@ -3,7 +3,7 @@ name: UCI URL model evaluation
 on:
   workflow_dispatch:
   push:
-    branches: [feature/uci-domain-evaluation]
+    branches: [feature/uci-domain-evaluation, feature/validation-abstention-v21]
     paths:
       - '.github/workflows/train-uci.yml'
       - 'src/**'
