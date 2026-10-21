@@ -1,0 +1,65 @@
+{
+  "version": "2.0.0",
+  "phishing_threshold": 0.06019217975664415,
+  "legitimate_threshold": 0.06019114787624524,
+  "phishing_class": 0,
+  "target_validation_fpr": 0.03,
+  "target_validation_phishing_miss_rate": 0.01,
+  "validation_observed_fpr": 0.02996,
+  "validation_observed_phishing_miss_rate": 0.00734,
+  "source": "UCI PhiUSIIL Phishing URL (id=967); labels 0 phishing / 1 legitimate",
+  "cleaning": {
+    "input_rows": 235795,
+    "valid_rows_before_dedup": 235761,
+    "dropped_missing_or_invalid": 34,
+    "contradictory_url_count": 1,
+    "quarantined_conflict_rows": 2,
+    "duplicate_rows_removed": 1106,
+    "retained_unique_urls": 234653
+  },
+  "split": {
+    "strategy": "GroupShuffleSplit by registrable domain / eTLD+1",
+    "fit_rows": 153043,
+    "validation_rows": 29920,
+    "test_rows": 51690,
+    "fit_domains": 115118,
+    "validation_domains": 25271,
+    "test_domains": 35098,
+    "train_seed": 42,
+    "validation_seed": 17
+  },
+  "metrics": {
+    "test_rows": 51690,
+    "average_precision_phishing": 0.99927,
+    "selective": {
+      "coverage": 1,
+      "decided_accuracy": 0.98203,
+      "phishing_detected_fraction": 0.99688,
+      "phishing_mislabelled_legitimate_fraction": 0.00312,
+      "legitimate_mislabelled_phishing_fraction": 0.03153,
+      "decisions": {
+        "phishing": 25447,
+        "legitimate": 26243,
+        "uncertain": 0
+      }
+    },
+    "forced_binary_at_high_threshold": {
+      "accuracy": 0.98203,
+      "precision_phishing": 0.96652,
+      "recall_phishing": 0.99688,
+      "f1_phishing": 0.98146,
+      "confusion_matrix_labels_0_1": [
+        [
+          24595,
+          77
+        ],
+        [
+          852,
+          26166
+        ]
+      ],
+      "warning": "Forced-binary metrics count every uncertain URL as legitimate; not the application's abstaining decision policy."
+    }
+  },
+  "warning": "Dataset-specific results. Validation thresholds are not guarantees; ML scores are not calibrated probabilities."
+}
