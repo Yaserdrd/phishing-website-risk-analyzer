@@ -99,6 +99,29 @@ def choose_thresholds(probabilities, true_labels, *, max_fp_rate=0.03, max_misse
     return low, high
 
 
+def widen_uncertainty_band(probabilities, low, high, *, target_abstention=0.05):
+    """Expand a validation-selected abstention band near the decision boundary.
+
+    The band only widens: it never creates additional confident decisions.
+    Target abstention is defined on validation, not on unseen URLs.
+    """
+    probs = np.asarray(probabilities, dtype=float)
+    if not len(probs) or not np.isfinite(probs).all():
+        raise ValueError("Valid finite validation scores are required")
+    if not 0 <= target_abstention < 1 or low >= high:
+        raise ValueError("Invalid band or abstention target")
+    current = (probs > low) & (probs < high)
+    n = int(np.ceil(len(probs) * target_abstention))
+    if current.sum() >= n or n == 0:
+        return float(low), float(high)
+    center = (float(low) + float(high)) / 2
+    selected = np.argsort(np.abs(probs - center), kind="stable")[:n]
+    return (
+        min(float(low), float(np.nextafter(probs[selected].min(), -np.inf))),
+        max(float(high), float(np.nextafter(probs[selected].max(), np.inf))),
+    )
+
+
 def selective_labels(probabilities, low, high):
     probs = np.asarray(probabilities, dtype=float)
     return np.where(probs >= high, "PHISHING", np.where(probs <= low, "LEGITIMATE", "UNCERTAIN"))
@@ -129,7 +152,8 @@ def train(frame, model_dir: str | Path, *, url_features=60000, host_features=300
     model.fit(fit_df.url, fit_df.label)
     idx = list(model.classes_).index(0)
     val_probs = model.predict_proba(val_df.url)[:, idx]
-    low, high = choose_thresholds(val_probs, val_df.label)
+    low_original, high_original = choose_thresholds(val_probs, val_df.label)
+    low, high = widen_uncertainty_band(val_probs, low_original, high_original)
     probs = model.predict_proba(test_df.url)[:, idx]
     decisions = selective_labels(probs, low, high)
     y = test_df.label.to_numpy()
@@ -160,8 +184,14 @@ def train(frame, model_dir: str | Path, *, url_features=60000, host_features=300
         },
     }
     val_decisions = selective_labels(val_probs, low, high)
+    val_coverage = float(np.mean(val_decisions != "UNCERTAIN"))
     meta = {
-        "version": "2.0.0",
+        "version": "2.1.0",
+        "decision_policy": "validation-only conservative threshold expansion, 5% target abstention",
+        "target_validation_abstention": 0.05,
+        "validation_coverage": round(val_coverage, 5),
+        "validation_uncertain_count": int(np.sum(val_decisions == "UNCERTAIN")),
+        "base_validation_thresholds": {"legitimate": low_original, "phishing": high_original},
         "phishing_threshold": high, "legitimate_threshold": low, "phishing_class": 0,
         "target_validation_fpr": 0.03,
         "target_validation_phishing_miss_rate": 0.01,

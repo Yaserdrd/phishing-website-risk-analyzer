@@ -41,6 +41,8 @@ def main():
     col2.metric("Risk level", result["risk_level"])
     st.progress(result["risk_score"] / 100)
     if result["ml"]:
+        if result["ml"]["label"] == "UNCERTAIN":
+            st.warning("ML result is UNCERTAIN. Do not treat a low heuristic score as proof this URL is safe.")
         st.subheader("Machine learning")
         st.write(f"**{result['ml']['label']}** | Model phishing score: {result['ml']['probability']:.1%}")
         st.caption(f"LEGITIMATE ≤ {result['ml']['low']:.0%}; PHISHING ≥ {result['ml']['high']:.0%}; otherwise UNCERTAIN")
