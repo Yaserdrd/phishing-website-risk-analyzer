@@ -69,3 +69,16 @@ def test_diagnostics_split_root_and_full_url(monkeypatch):
 def test_no_empty_diagnostics():
     with pytest.raises(ValueError, match='At least one'):
         external.audit_predictions([], object(), {})
+
+def test_paired_root_input_shape_diagnostic(monkeypatch):
+    from evaluate_external import paired_root_diagnostic
+    def fake_predict(url, model, meta):
+        label = 'PHISHING' if '/login' in url else 'LEGITIMATE'
+        return {'label': label, 'probability': .9 if label == 'PHISHING' else .1}
+    monkeypatch.setattr('evaluate_external.predict', fake_predict)
+    report = paired_root_diagnostic(['https://example.com/login', 'https://example.net/'], None, None)
+    assert report['count'] == 2
+    assert report['urls_changed_by_root_transform'] == 1
+    assert report['decision_transitions']['PHISHING -> LEGITIMATE'] == 1
+    assert report['root_minus_full_score']['mean'] == -.4
+    assert 'no inherited ground truth' in report['warning']
