@@ -1,0 +1,56 @@
+name: Prospective phishing holdout
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout frozen v2.1 source
+        uses: actions/checkout@v4
+        with:
+          ref: 9a3ced00d98a40773837e0f52aa236c9c1b3c45f
+          path: frozen
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Run local tests
+        run: PYTHONPATH=src pytest -q
+      - name: Require prospective cutoff
+        run: |
+          python - <<'PY'
+          from datetime import datetime,timezone
+          assert datetime.now(timezone.utc) >= datetime(2026,10,23,tzinfo=timezone.utc), "Not yet eligible"
+          PY
+      - name: Build model from frozen commit and original UCI data
+        run: |
+          cd frozen
+          python scripts/download_uci.py
+          python scripts/train_model.py --csv data/phiusiil_urls.csv
+          python scripts/verify_report.py models/url_model_meta.json
+      - name: Download future verified PhishTank feed
+        run: |
+          mkdir -p data/external
+          curl --fail --location --silent --show-error --max-time 90 --max-filesize 20000000 \
+            --user-agent "PhishingRiskResearch/1.0" \
+            "https://data.phishtank.com/data/online-valid.csv.gz" -o data/external/online-valid.csv.gz
+      - name: Test frozen model on only post-cutoff records
+        run: |
+          python scripts/prospective_holdout.py \
+            --model-dir frozen/models \
+            --uci-csv frozen/data/phiusiil_urls.csv \
+            --phishing-csv data/external/online-valid.csv.gz \
+            --min-count 200 --out reports/prospective_holdout.json
+      - name: Publish only complete positive-class report
+        uses: actions/upload-artifact@v4
+        with:
+          name: prospective-positive-holdout-report
+          path: reports/prospective_holdout.json
+          if-no-files-found: error
+          retention-days: 30
