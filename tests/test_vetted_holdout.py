@@ -45,7 +45,7 @@ def test_duplicate_url_rejected(tmp_path):
         audit.load_vetted(write(tmp_path, sample()+[sample()[0]]), set(), min_per_class=1, now=NOW)
 
 def test_reject_mixed_labels_one_domain(tmp_path):
-    rows=[sample()[0],f'https://sub.one.example,LEGITIMATE,{DATE},review-2,analyst-b\n']
+    rows=[f'https://one.example.co.uk,PHISHING,{DATE},review-1,analyst-a\n',f'https://sub.one.example.co.uk,LEGITIMATE,{DATE},review-2,analyst-b\n']
     with pytest.raises(ValueError, match='contradictory'):
         audit.load_vetted(write(tmp_path, rows), set(), min_per_class=1, now=NOW)
 
