@@ -1,6 +1,13 @@
 name: Independent URL source audit
 on:
   workflow_dispatch:
+  push:
+    branches: [feature/real-external-audit-2026]
+    paths:
+      - '.github/workflows/external-evaluation.yml'
+      - 'scripts/evaluate_external.py'
+      - 'tests/test_external_audit.py'
+      - 'requirements-dev.txt'
 jobs:
   evaluate:
     runs-on: ubuntu-latest
