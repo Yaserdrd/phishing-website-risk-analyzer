@@ -155,6 +155,37 @@ def audit_predictions(urls, model, meta):
     }
 
 
+
+def paired_root_diagnostic(urls, model, meta):
+    """Paired URL-shape diagnostic; synthetic roots have no phishing/legitimate labels."""
+    if not urls:
+        raise ValueError('At least one URL required')
+    full_scores, root_scores = [], []
+    transitions = Counter()
+    changed = 0
+    for url in urls:
+        parts = urlsplit(url)
+        root = normalize_url(f'{parts.scheme}://{parts.netloc}/')
+        before = predict(url, model, meta)
+        after = predict(root, model, meta)
+        full_scores.append(before['probability'])
+        root_scores.append(after['probability'])
+        transitions[f"{before['label']} -> {after['label']}"] += 1
+        changed += int(root != url)
+    diffs = np.asarray(root_scores) - np.asarray(full_scores)
+    return {
+        'count': len(urls),
+        'urls_changed_by_root_transform': changed,
+        'root_minus_full_score': {
+            'mean': round(float(np.mean(diffs)), 6),
+            'median': round(float(np.median(diffs)), 6),
+            'fraction_increased': round(float(np.mean(diffs > 0)), 6),
+            'fraction_decreased': round(float(np.mean(diffs < 0)), 6),
+        },
+        'decision_transitions': dict(sorted(transitions.items())),
+        'warning': 'Synthetic root input-shape perturbation ONLY. Root URL has no inherited ground truth label.',
+    }
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--model-dir', default='models')
@@ -188,6 +219,7 @@ def main():
         'selection': {'phishing': p_count, 'popular': t_count},
         'phishing_verified_online': phish_result,
         'popular_domains_unverified': popular_result,
+        'paired_phishing_root_perturbation': paired_root_diagnostic(phish, model, meta),
         'research_warning': (
             'SEVERE_POPULAR_DOMAIN_ALERT_SKEW: Investigate domain-only input shift before any deployment.'
             if popular_alert > 0.5 else None
