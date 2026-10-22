@@ -2,7 +2,7 @@ name: Independent URL source audit
 on:
   workflow_dispatch:
   push:
-    branches: [feature/real-external-audit-2026]
+    branches: [feature/real-external-audit-2026, feature/paired-url-shape-diagnostic]
     paths:
       - '.github/workflows/external-evaluation.yml'
       - 'scripts/evaluate_external.py'
