@@ -1,0 +1,56 @@
+{
+  "model_version": "2.1.0",
+  "source_fingerprints": {
+    "phishtank_sha256": "dfae6d6d5a707502a5df1ccbf94e57d633e2481d8027d27dde9824cbde2b07b5",
+    "tranco_sha256": "0ab0fa09d91361b5281aad70baec395600a28cd4c3b6619b9ad21fe16443ef3e"
+  },
+  "selection": {
+    "phishing": {
+      "seen": 10000,
+      "invalid": 5,
+      "duplicates": 18,
+      "overlap_with_uci_domains": 610,
+      "retained": 2000
+    },
+    "popular": {
+      "seen": 10000,
+      "invalid": 0,
+      "duplicates": 0,
+      "overlap_with_uci_domains": 408,
+      "retained": 2000
+    }
+  },
+  "phishing_verified_online": {
+    "count": 2000,
+    "decisions": {
+      "PHISHING": 1982,
+      "UNCERTAIN": 3,
+      "LEGITIMATE": 15
+    },
+    "fraction": {
+      "PHISHING": 0.991,
+      "UNCERTAIN": 0.0015,
+      "LEGITIMATE": 0.0075
+    }
+  },
+  "popular_domains_unverified": {
+    "count": 2000,
+    "decisions": {
+      "PHISHING": 1996,
+      "UNCERTAIN": 0,
+      "LEGITIMATE": 4
+    },
+    "fraction": {
+      "PHISHING": 0.998,
+      "UNCERTAIN": 0.0,
+      "LEGITIMATE": 0.002
+    }
+  },
+  "limitations": [
+    "Tranco popularity does NOT establish benign ground truth.",
+    "Not a combined accuracy test.",
+    "Only URL strings were scored; no suspected URL was visited.",
+    "Overlap excludes every UCI domain, including its test partition.",
+    "Provider feeds can change; snapshot hashes recorded."
+  ]
+}

@@ -1,80 +1,212 @@
-"""Independent-source URL-only audit. Never visits input URLs."""
-import argparse,csv,hashlib,json,sys
-from pathlib import Path
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"src"))
-from phishing_analyzer.model import load_model,predict
-from phishing_analyzer.urls import normalize_url,domain_group
+"""Snapshot-aware external URL audit. Never makes HTTP requests to URLs from feeds.
 
-def read_urls(path,kind,limit):
-    import gzip,io,zipfile
-    raw=Path(path).read_bytes()
-    if kind=="phishing":
-        txt=gzip.decompress(raw) if raw[:2]==b"\x1f\x8b" else raw
-        reader=csv.DictReader(io.StringIO(txt.decode("utf-8-sig")))
-        if not {"url","verified","online"}.issubset(reader.fieldnames or []):
-            raise ValueError("Expected PhishTank verified, online, url fields")
-        urls=[row["url"] for row in reader if row["verified"].lower()=="yes" and row["online"].lower()=="yes"]
-    else:
+PhishTank entries are *reported* verified phishing; Tranco ranks are unlabeled.
+The latter cannot be used to estimate specificity or a legitimate-site false-positive rate.
+"""
+from __future__ import annotations
+
+import argparse
+import csv
+import gzip
+import hashlib
+import io
+import json
+import sys
+import zipfile
+from collections import Counter
+from datetime import datetime, timezone
+from pathlib import Path
+from urllib.parse import urlsplit
+
+import numpy as np
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'src'))
+from phishing_analyzer.model import load_model, predict
+from phishing_analyzer.urls import domain_group, normalize_url
+
+MAX_FEED_BYTES = 100_000_000
+
+
+def read_urls(path, kind, limit):
+    """Read a bounded number of URLs from downloaded snapshots, never visiting them."""
+    raw = Path(path).read_bytes()
+    fingerprint = hashlib.sha256(raw).hexdigest()
+    limit = int(limit)
+    if limit <= 0:
+        raise ValueError('Sample limit must be positive')
+    if kind == 'phishing':
+        if raw[:2] == b'\x1f\x8b':
+            with gzip.GzipFile(fileobj=io.BytesIO(raw)) as z:
+                decoded = z.read(MAX_FEED_BYTES + 1)
+            if len(decoded) > MAX_FEED_BYTES:
+                raise ValueError('Decompressed phishing feed too large')
+        else:
+            if len(raw) > MAX_FEED_BYTES:
+                raise ValueError('Phishing feed too large')
+            decoded = raw
+        reader = csv.DictReader(io.StringIO(decoded.decode('utf-8-sig')))
+        if not {'url', 'verified', 'online'}.issubset(reader.fieldnames or []):
+            raise ValueError('Expected verified, online, url PhishTank CSV fields')
+        urls = []
+        for row in reader:
+            if (row.get('verified') or '').lower() == 'yes' and (row.get('online') or '').lower() == 'yes':
+                urls.append(row['url'])
+                if len(urls) >= limit * 5:
+                    break
+    elif kind == 'popular':
+        urls = []
         with zipfile.ZipFile(path) as z:
-            files=[f for f in z.infolist() if f.filename.endswith(".csv") and not f.is_dir()]
-            if len(files)!=1 or files[0].file_size>35_000_000: raise ValueError("Unexpected Tranco ZIP")
-            with z.open(files[0]) as f:
-                urls=["https://"+r[1]+"/" for r in csv.reader(io.TextIOWrapper(f,encoding="utf8")) if len(r)>1]
-    return urls[:limit*5],hashlib.sha256(raw).hexdigest()
+            files = [x for x in z.infolist() if x.filename.endswith('.csv') and not x.is_dir()]
+            if len(files) != 1 or files[0].file_size > 35_000_000:
+                raise ValueError('Unexpected Tranco ZIP contents')
+            with z.open(files[0]) as handle:
+                for row in csv.reader(io.TextIOWrapper(handle, encoding='utf-8')):
+                    if len(row) >= 2:
+                        urls.append('https://' + row[1].strip() + '/')
+                        if len(urls) >= limit * 5:
+                            break
+    else:
+        raise ValueError('Unknown dataset kind')
+    return urls, fingerprint
+
 
 def normalize_or_none(url):
-    try: return normalize_url(url)
-    except (ValueError,TypeError): return None
+    try:
+        return normalize_url(url)
+    except (ValueError, TypeError):
+        return None
+
 
 def original_domains(path):
-    with open(path,newline="",encoding="utf-8-sig") as f:
-        reader=csv.DictReader(f)
-        key=next((c for c in reader.fieldnames or [] if c.lower()=="url"),None)
-        if key is None: raise ValueError("UCI file requires a URL column")
-        return {domain_group(u) for row in reader if (u:=normalize_or_none(row[key]))}
+    with open(path, newline='', encoding='utf-8-sig') as handle:
+        reader = csv.DictReader(handle)
+        column = next((x for x in (reader.fieldnames or []) if x.lower() == 'url'), None)
+        if column is None:
+            raise ValueError('UCI file requires URL column')
+        return {domain_group(normalized) for row in reader if (normalized := normalize_or_none(row[column]))}
 
-def filter_novel(urls,blocked,limit):
-    counts={"seen":len(urls),"invalid":0,"duplicates":0,"overlap_with_uci_domains":0}
-    seen=set();out=[]
+
+def filter_novel(urls, blocked, limit):
+    """Select first novel entries and account only for actually examined rows."""
+    counts = {'examined': 0, 'invalid': 0, 'duplicates': 0, 'overlap_with_uci_domains': 0}
+    found, seen = [], set()
     for item in urls:
-        u=normalize_or_none(item)
-        if u is None: counts["invalid"]+=1;continue
-        if u in seen: counts["duplicates"]+=1;continue
-        seen.add(u)
-        if domain_group(u) in blocked: counts["overlap_with_uci_domains"]+=1;continue
-        out.append(u)
-        if len(out)==limit:break
-    counts["retained"]=len(out)
-    return out,counts
+        counts['examined'] += 1
+        normalized = normalize_or_none(item)
+        if normalized is None:
+            counts['invalid'] += 1
+            continue
+        if normalized in seen:
+            counts['duplicates'] += 1
+            continue
+        seen.add(normalized)
+        if domain_group(normalized) in blocked:
+            counts['overlap_with_uci_domains'] += 1
+            continue
+        found.append(normalized)
+        if len(found) >= limit:
+            break
+    counts['retained'] = len(found)
+    counts['selection_method'] = 'first valid novel-domain entries in source order (not a random sample)'
+    return found, counts
 
-def score(urls,model,meta):
-    counts={k:0 for k in ("PHISHING","UNCERTAIN","LEGITIMATE")}
-    for url in urls: counts[predict(url,model,meta)["label"]]+=1
-    return {"count":len(urls),"decisions":counts,"fraction":{k:v/len(urls) for k,v in counts.items()}}
+
+def _bucket(url):
+    length = len(url)
+    return 'short_le_50' if length <= 50 else ('medium_51_100' if length <= 100 else 'long_gt_100')
+
+
+def audit_predictions(urls, model, meta):
+    if not urls:
+        raise ValueError('At least one URL required')
+    labels = Counter()
+    by_structure = {'root_only': Counter(), 'with_path_or_query': Counter()}
+    by_length = {k: Counter() for k in ('short_le_50', 'medium_51_100', 'long_gt_100')}
+    probs = []
+    for url in urls:
+        result = predict(url, model, meta)
+        decision = result['label']
+        labels[decision] += 1
+        probs.append(result['probability'])
+        parts = urlsplit(url)
+        structure = 'root_only' if parts.path in ('', '/') and not parts.query else 'with_path_or_query'
+        by_structure[structure][decision] += 1
+        by_length[_bucket(url)][decision] += 1
+
+    classes = ('PHISHING', 'UNCERTAIN', 'LEGITIMATE')
+    def complete(counter):
+        return {label: int(counter[label]) for label in classes}
+    def breakdown(block):
+        return {key: {'count': sum(ct.values()), 'decisions': complete(ct)} for key, ct in block.items()}
+    scores = np.asarray(probs, dtype=float)
+    return {
+        'count': len(urls),
+        'decisions': complete(labels),
+        'fraction': {k: round(labels[k] / len(urls), 6) for k in classes},
+        'diagnostics': {
+            'url_structure': breakdown(by_structure),
+            'url_length': breakdown(by_length),
+            'model_phishing_score_quantiles': {
+                str(percentile): round(float(np.quantile(scores, percentile / 100)), 6)
+                for percentile in (0, 10, 25, 50, 75, 90, 100)
+            },
+        },
+    }
+
 
 def main():
-    parser=argparse.ArgumentParser()
-    parser.add_argument("--model-dir",default="models")
-    parser.add_argument("--uci-csv",required=True)
-    parser.add_argument("--phishing-csv",required=True,help="PhishTank online-valid.csv(.gz)")
-    parser.add_argument("--popular-zip",required=True,help="Tranco top-1m.csv.zip")
-    parser.add_argument("--sample",type=int,default=2000)
-    parser.add_argument("--out",default="reports/external_audit.json")
-    args=parser.parse_args()
-    if not 1<=args.sample<=10000: parser.error("sample must be 1..10000")
-    model,meta=load_model(args.model_dir)
-    if model is None: parser.error("No trusted trained model found")
-    blocked=original_domains(args.uci_csv)
-    rawp,hashp=read_urls(args.phishing_csv,"phishing",args.sample)
-    rawt,hasht=read_urls(args.popular_zip,"popular",args.sample)
-    ph,pc=filter_novel(rawp,blocked,args.sample)
-    pop,tc=filter_novel(rawt,blocked,args.sample)
-    if not ph or not pop: parser.error("Novel-domain samples are empty")
-    result={"model_version":meta["version"],"source_fingerprints":{"phishtank_sha256":hashp,"tranco_sha256":hasht},
-        "selection":{"phishing":pc,"popular":tc},"phishing_verified_online":score(ph,model,meta),
-        "popular_domains_unverified":score(pop,model,meta),
-        "limitations":["Tranco popularity does NOT establish benign ground truth.","Not a combined accuracy test.","Only URL strings were scored; no suspected URL was visited.","Overlap excludes every UCI domain, including its test partition.","Provider feeds can change; snapshot hashes recorded."]}
-    dest=Path(args.out);dest.parent.mkdir(parents=True,exist_ok=True)
-    dest.write_text(json.dumps(result,indent=2)+"\n",encoding="utf8")
-    print(json.dumps(result,indent=2))
-if __name__=="__main__":main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--model-dir', default='models')
+    parser.add_argument('--uci-csv', required=True)
+    parser.add_argument('--phishing-csv', required=True)
+    parser.add_argument('--popular-zip', required=True)
+    parser.add_argument('--sample', type=int, default=2000)
+    parser.add_argument('--out', default='reports/external_audit.json')
+    args = parser.parse_args()
+    if not 1 <= args.sample <= 10000:
+        parser.error('sample must be 1..10000')
+    model, meta = load_model(args.model_dir)
+    if model is None:
+        parser.error('No trusted trained model found')
+    excluded_domains = original_domains(args.uci_csv)
+    raw_p, hash_p = read_urls(args.phishing_csv, 'phishing', args.sample)
+    raw_t, hash_t = read_urls(args.popular_zip, 'popular', args.sample)
+    phish, p_count = filter_novel(raw_p, excluded_domains, args.sample)
+    popular, t_count = filter_novel(raw_t, excluded_domains, args.sample)
+    if not phish or not popular:
+        parser.error('Novel-domain samples are empty')
+    phish_result = audit_predictions(phish, model, meta)
+    popular_result = audit_predictions(popular, model, meta)
+    popular_alert = popular_result['fraction']['PHISHING']
+    # This is a signal to investigate, NOT a false-positive metric or acceptance guarantee.
+    result = {
+        'audit_schema_version': 2,
+        'snapshot_evaluated_at_utc': datetime.now(timezone.utc).isoformat(),
+        'model_version': meta['version'],
+        'source_fingerprints': {'phishtank_sha256': hash_p, 'tranco_sha256': hash_t},
+        'selection': {'phishing': p_count, 'popular': t_count},
+        'phishing_verified_online': phish_result,
+        'popular_domains_unverified': popular_result,
+        'research_warning': (
+            'SEVERE_POPULAR_DOMAIN_ALERT_SKEW: Investigate domain-only input shift before any deployment.'
+            if popular_alert > 0.5 else None
+        ),
+        'limitations': [
+            'Tranco popularity is NOT legitimate ground truth; its alerts are NOT confirmed false positives.',
+            'Popular-domain inputs are reconstructed HTTPS roots; phishing feed contains full URLs. Input-format shift may dominate.',
+            'Selection is source-order first available after domain filtering, not an unbiased random sample.',
+            'No training/threshold tuning can use these exploratory outputs as final untouched evaluation.',
+            'No suspicious URL was visited. URLs are not exported to the report.',
+            'Only registrable-domain overlap with the UCI corpus was excluded; campaign overlap and label errors remain possible.',
+            'Feed snapshots change; SHA256 and UTC acquisition time are recorded.',
+        ],
+    }
+    dest = Path(args.out)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
+    print(json.dumps(result, indent=2))
+
+
+if __name__ == '__main__':
+    main()
