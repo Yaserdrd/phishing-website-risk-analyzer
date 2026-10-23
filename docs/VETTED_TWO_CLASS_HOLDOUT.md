@@ -31,10 +31,21 @@ PYTHONPATH=src python scripts/evaluate_vetted_holdout.py \
   --vetted-csv /secure/reviewed_urls.csv \
   --uci-csv data/phiusiil_urls.csv \
   --model-dir models \
+  --manifest /secure/frozen_manifest.json \
+  --manifest-sha256 "$APPROVED_MANIFEST_SHA256" \
   --min-per-class 100 \
   --out reports/vetted_holdout.json
 ```
 
 Fails with **no metric** if either class has fewer than 100 reviewed samples (or if metadata is invalid). Outputs abstention-aware three-way confusion counts, coverage, accuracy among decided, phishing detection and false-clear rates, legitimate false-alarm rate. The script does **not** visit URLs.
+
+The manifest and its approved digest are now required. Follow
+[frozen model identity](FROZEN_MODEL_IDENTITY.md) to bind the exact trusted model,
+metadata, UCI input and runtime before evaluation. Creating a new hash around an
+untrusted pickle does not make it trusted. Version `2.1.0` alone is insufficient.
+The UCI CSV and model paths above must match the approved manifest. Reviewers and
+evaluation input must use the shared explicit-UTC ordering rule through the fixed
+cutoff and captured evaluation time; actual two-reviewer provenance enforcement
+remains separate work.
 
 **Limitations:** minimum class count is an engineering gate, not a confidence guarantee. Curated selection cannot by itself establish real-world prevalence or predictive calibration. This evaluator must not be used repeatedly to choose a new model; collect another independent holdout for subsequent versions.

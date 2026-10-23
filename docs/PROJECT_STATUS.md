@@ -15,11 +15,12 @@ real-world detection quality or deployment security. See [agent instructions](..
 | --- | --- | --- |
 | `app.py` | Streamlit input, results, warnings | Model decision separate from signal score; UNAVAILABLE in demo mode; live checks off by default |
 | `src/phishing_analyzer/urls.py` | Normalization, validation, registrable-domain grouping | Shared train/inference normalization; bundled offline PSL |
-| `src/phishing_analyzer/model.py` | URL/hostname character TF-IDF + Logistic Regression | Domain-disjoint fit/validation/test; validation-only selective thresholds |
+| `src/phishing_analyzer/model.py` | URL/hostname character TF-IDF + Logistic Regression | Exact binary labels checked before conversion; fit/split/threshold algorithms unchanged |
+| `src/phishing_analyzer/protocol.py`, `provenance.py` | Shared UTC policy and frozen artifact verification | Approved manifest trust anchor required; a digest does not authenticate its supplier |
 | `src/phishing_analyzer/analyzer.py` | Combine ML, heuristics, optional checks | Legacy `risk_level` retained for callers as a score band; UI does not present it as a verdict |
 | `src/phishing_analyzer/security.py` | Lexical, TLS, RDAP, bounded HTML signals | Opt-in network code; hardening gaps listed below |
 | `scripts/evaluate_external.py` | Separate-source audit and paired URL/root diagnostics | Exploratory; no inherited ground truth for synthetic roots |
-| `scripts/prospective_holdout.py` | Post-cutoff positive-only evaluation | Protocol implemented; timestamp/provenance gaps remain |
+| `scripts/prospective_holdout.py` | Post-cutoff positive-only evaluation | Explicit UTC/order/current-time filtering and pre-unpickle identity gate |
 | `scripts/evaluate_vetted_holdout.py` | Evidence-reviewed two-class evaluation | Metadata validation does not verify evidence truth or mandatory dual review |
 | `scripts/review_consensus.py` | Offline two-reviewer agreement | Distinct IDs and agreement cannot prove actual independence |
 | `notebooks/experiments.ipynb` | Historical UCI 327 numeric-feature experiments | Separate from the UCI 967 URL application |
@@ -58,7 +59,17 @@ resolve and `git diff --check` passes. The configured
 Tests include temporary synthetic training and mocked evaluation, not a full UCI
 rerun. They do not cover every network boundary or all known defects below.
 No feed download, live phishing visit, final holdout evaluation, model update,
-or threshold change was performed for the governance or UI presentation changes.
+or threshold change was performed for the governance, UI or integrity changes.
+
+The P0 integrity change started with **71 passing tests on each of Python
+3.10.22, 3.11.17 and 3.12.14**. Afterwards **117 tests passed on each version**;
+source compilation and `pip check` passed on all three. New offline tests cover
+pre-unpickle rejection, altered model/metadata/UCI/manifest bytes, environment
+mismatch, fixed source/clean-checkout guards, digest-required CLI calls, aggregate
+CLI outputs, UTC boundaries and exact label handling. CLI help entry points and
+local documentation links were checked. Workflow YAML parsed successfully and
+the identity-pin step precedes feed acquisition; the remote workflow was not run.
+Tests use temporary safe fake artifacts, not a real frozen v2.1 artifact.
 
 ## Decision presentation change
 
@@ -85,16 +96,17 @@ UI and pass with this change. No model/data/threshold code was changed.
 
 ## Open risk register
 
-R1's UI presentation fix is implemented; the remaining findings are open.
+R1's UI fix, R3/R4 input validation and R2's per-build identity gate are implemented.
+Historical artifact identity and broader reproducibility remain unverified.
 Behavioral reproductions used offline synthetic inputs; network findings are
 code-review observations.
 
 | ID / priority | Finding and evidence | Required acceptance check |
 | --- | --- | --- |
 | R1 / P0, UI resolved | Legacy score bands can differ from model decisions; passive maximum 55 cannot reach HIGH. UI now shows model decisions with explicit notices and separate signal scores, without a generic risk verdict. | Offline UI regressions cover all decisions, missing model and threshold boundaries. Legacy Python score-band compatibility remains documented; no threshold changes. |
-| R2 / P0 | Holdout CLIs check version `2.1.0` and write a fixed training commit without verifying model identity. Frozen source checkout does not freeze dependencies or dataset bytes. | Verify trusted model/metadata/data/code identities and record the actual environment before claiming frozen evaluation. |
-| R3 / P0 | `prospective_holdout.date_utc/select_phishing` accepts naive timestamps, future records and reversed submission/verification ordering. | Require explicit UTC and cutoff <= submission <= verification <= evaluation time; test boundaries deterministically. |
-| R4 / P0 | `model.load_csv` casts labels to int before checking membership; synthetic 0.5/1.5 become 0/1. | Reject non-binary labels before lossy conversion; retain valid cleaning behavior. |
+| R2 / P0, integrity gate implemented | Both CLIs now require an approved manifest digest, bind model/metadata/UCI bytes and runtime/PSL identity before unpickling, and record actual evaluator code hashes. The workflow pins the same-run build before feed acquisition. | Offline tampering/CLI tests pass. This does not authenticate a self-supplied manifest or establish identity with a historical model; preserve a trusted approved manifest/environment for cross-run claims. |
+| R3 / P0, resolved | Shared UTC parser and cutoff <= observation/submission <= verification <= captured evaluation time rule used by both evaluators and review consensus. Invalid feed records cannot satisfy minimum counts. | Fixed-clock tests cover naive/non-UTC, future, reversed, cutoff and evaluation-time boundaries. |
+| R4 / P0, resolved | CSV labels are checked with exact decimal semantics before integer conversion; fractions, infinities, underflow and near-integer rounding are rejected. | Invalid-label and valid binary cleaning tests pass; fitting, splitting and thresholds are unchanged. |
 | R5 / P1, deployment blocker | RDAP follows redirects outside the pinned HTML/TLS path. Per-socket timeouts do not bound total operation time. Redirect, pinning, body and TLS tests are incomplete. | Mocked adversarial tests; explicit destination policy, response bounds and overall deadlines; external egress isolation before deployment. |
 | R6 / P1, evaluation prerequisite | Evaluator accepts nonempty single reviewer IDs; consensus output is not a mandatory input gate. Private output location is a documented convention. | Bind evaluation to reviewed consensus provenance and prevent private outputs in the checkout; retain independent human evidence verification. |
 | R7 / P1 | Dependency ranges, changing feeds/PSL and short-lived artifacts limit repeatability. Some older documents contain pre-verification status text. | Reproducible dependency resolution and experiment manifests; reconcile status with durable aggregate evidence. |
@@ -111,8 +123,10 @@ inspection/tuning of the final set. No completed prospective or vetted two-class
 report is recorded in the current checkout.
 
 Keep raw URLs and review evidence outside Git, blind reviewers to model scores,
-verify evidence independently, and fix R2/R3 before relying on a frozen positive
-holdout claim. Resolve R6 before claiming an enforced dual-review evaluation.
+verify evidence independently, and supply a trusted approved manifest/environment
+through the R2 gate before a frozen positive holdout run. The gate does not
+retrospectively approve historical artifacts. Resolve R6 before claiming an
+enforced dual-review evaluation.
 Minimum counts are engineering gates, not statistical confidence guarantees.
 
 ## Ordered delivery plan
@@ -126,9 +140,11 @@ tests where behavior changes, and Python 3.10/3.11/3.12 checks.
 2. **P0: decision presentation (R1), implemented.** Separate model decision,
    signal score, uncertainty and model absence; verify rendered Streamlit results
    with fake models and no network. Model parameters and thresholds are preserved.
-3. **P0: evaluation integrity (R2/R3/R4).** Introduce verified experiment
-   identities, strict temporal validation and lossless label checks. Preserve
-   the registered cutoff and keep independent final data untouched.
+3. **P0: evaluation integrity (R2/R3/R4), implemented with explicit trust limits.**
+   Require approved experiment identities before model loading, shared strict
+   temporal validation and exact label checks. The registered cutoff and final
+   data remain untouched. See [frozen identity](FROZEN_MODEL_IDENTITY.md);
+   historical artifact approval and cross-run reproducibility are not claimed.
 4. **P1: network hardening (R5).** Add deterministic tests and bounded,
    policy-controlled network adapters. Document deployment isolation requirements.
 5. **P1: reproducibility (R7).** Record dependency, PSL, source and artifact

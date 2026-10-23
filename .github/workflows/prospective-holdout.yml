@@ -34,6 +34,14 @@ jobs:
           python scripts/download_uci.py
           python scripts/train_model.py --csv data/phiusiil_urls.csv
           python scripts/verify_report.py models/url_model_meta.json
+      - name: Pin trusted build identity before acquiring holdout
+        id: freeze
+        run: |
+          digest=$(python scripts/freeze_manifest.py \
+            --source-root frozen --model-dir frozen/models \
+            --uci-csv frozen/data/phiusiil_urls.csv \
+            --out frozen/models/frozen_manifest.json)
+          printf 'sha256=%s\n' "$digest" >> "$GITHUB_OUTPUT"
       - name: Download future verified PhishTank feed
         run: |
           mkdir -p data/external
@@ -41,10 +49,14 @@ jobs:
             --user-agent "PhishingRiskResearch/1.0" \
             "https://data.phishtank.com/data/online-valid.csv.gz" -o data/external/online-valid.csv.gz
       - name: Test frozen model on only post-cutoff records
+        env:
+          FROZEN_MANIFEST_SHA256: ${{ steps.freeze.outputs.sha256 }}
         run: |
           python scripts/prospective_holdout.py \
             --model-dir frozen/models \
             --uci-csv frozen/data/phiusiil_urls.csv \
+            --manifest frozen/models/frozen_manifest.json \
+            --manifest-sha256 "$FROZEN_MANIFEST_SHA256" \
             --phishing-csv data/external/online-valid.csv.gz \
             --min-count 200 --out reports/prospective_holdout.json
       - name: Publish only complete positive-class report

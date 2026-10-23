@@ -62,3 +62,14 @@ def test_metrics_have_correct_denominators(monkeypatch):
 def test_naive_timestamp_rejected():
     with pytest.raises(ValueError, match='UTC'):
         audit.parse_time('2026-10-24T09:00:00')
+
+
+@pytest.mark.parametrize('date', [
+    '2026-10-24T10:00:00Z,2026-10-24T09:00:00Z',
+    '2026-10-24T08:00:00Z,2099-01-01T00:00:00Z',
+    '2026-10-24T08:00:00+03:00,2026-10-24T09:00:00Z',
+])
+def test_shared_temporal_rules_reject_invalid_review_windows(tmp_path, date):
+    bad = [sample()[0].replace(DATE, date), sample()[1]]
+    with pytest.raises(ValueError, match='timestamp|UTC'):
+        audit.load_vetted(write(tmp_path, bad), set(), min_per_class=1, now=NOW)

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 import joblib
@@ -39,16 +40,20 @@ def make_model(max_url_features: int = 60000, max_host_features: int = 30000):
 
 def load_csv(path: str | Path):
     """Return cleaned URL,label frame; drop contradictory labels (with audit)."""
-    frame = pd.read_csv(path, usecols=lambda c: c.lower() in {"url", "label"})
+    frame = pd.read_csv(path, usecols=lambda c: c.lower() in {"url", "label"}, dtype=str)
     lookup = {c.lower(): c for c in frame.columns}
     if set(lookup) != {"url", "label"}:
         raise ValueError("Expected CSV columns: URL,label (0 phishing / 1 legitimate)")
     frame = frame[[lookup["url"], lookup["label"]]].rename(columns={lookup["url"]: "url", lookup["label"]: "label"})
     before = len(frame)
     frame = frame.dropna()
-    frame["label"] = pd.to_numeric(frame.label, errors="raise").astype(int)
-    if not set(frame.label.unique()).issubset({0, 1}):
+    try:
+        valid_labels = frame.label.map(lambda value: Decimal(value) in (0, 1)).all()
+    except InvalidOperation as exc:
+        raise ValueError("Labels must be 0 (phishing) and 1 (legitimate)") from exc
+    if not valid_labels:
         raise ValueError("Labels must be 0 (phishing) and 1 (legitimate)")
+    frame["label"] = frame.label.map(lambda value: int(Decimal(value)))
 
     def safe_normalize(value):
         try:
