@@ -6,6 +6,12 @@ from .urls import normalize_url
 
 
 def analyze(url, model=None, meta=None, *, active=False):
+    """Return separate model evidence and an additive signal score.
+
+    ``risk_level`` is a legacy score band, not an overall model verdict. It can
+    be LOW even when ``ml.label`` is PHISHING or UNCERTAIN; the UI presents the
+    model decision directly rather than treating this band as a safety label.
+    """
     url = normalize_url(url)
     passive, findings = passive_check(url)
     scores = {"url_heuristics": passive}

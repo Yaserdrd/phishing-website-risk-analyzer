@@ -1,8 +1,9 @@
 # Project status and technical roadmap
 
 Last reviewed: **2026-10-23**. Application baseline:
-`b5b5df71ae39ca3b3d2c213dfab93d4f12a0fb20`. This documentation update does not
-change that application baseline. Model implementation: **v2.1.0**.
+`b5b5df71ae39ca3b3d2c213dfab93d4f12a0fb20` is the audited baseline. The subsequent
+`feature/model-decision-presentation` change separates UI decisions from scores
+as described below. Model implementation and thresholds remain **v2.1.0**.
 
 **Development prototype; not accepted for production website safety decisions.**
 The environment supports development and testing. This does not establish
@@ -12,10 +13,10 @@ real-world detection quality or deployment security. See [agent instructions](..
 
 | Component | Responsibility | Current boundary |
 | --- | --- | --- |
-| `app.py` | Streamlit input, results, warnings | Heuristic demo without a trusted local model; live checks off by default |
+| `app.py` | Streamlit input, results, warnings | Model decision separate from signal score; UNAVAILABLE in demo mode; live checks off by default |
 | `src/phishing_analyzer/urls.py` | Normalization, validation, registrable-domain grouping | Shared train/inference normalization; bundled offline PSL |
 | `src/phishing_analyzer/model.py` | URL/hostname character TF-IDF + Logistic Regression | Domain-disjoint fit/validation/test; validation-only selective thresholds |
-| `src/phishing_analyzer/analyzer.py` | Combine ML, heuristics, optional checks | Combined score and ML decisions currently have conflicting semantics |
+| `src/phishing_analyzer/analyzer.py` | Combine ML, heuristics, optional checks | Legacy `risk_level` retained for callers as a score band; UI does not present it as a verdict |
 | `src/phishing_analyzer/security.py` | Lexical, TLS, RDAP, bounded HTML signals | Opt-in network code; hardening gaps listed below |
 | `scripts/evaluate_external.py` | Separate-source audit and paired URL/root diagnostics | Exploratory; no inherited ground truth for synthetic roots |
 | `scripts/prospective_holdout.py` | Post-cutoff positive-only evaluation | Protocol implemented; timestamp/provenance gaps remain |
@@ -57,16 +58,40 @@ resolve and `git diff --check` passes. The configured
 Tests include temporary synthetic training and mocked evaluation, not a full UCI
 rerun. They do not cover every network boundary or all known defects below.
 No feed download, live phishing visit, final holdout evaluation, model update,
-or threshold change was performed for this documentation task.
+or threshold change was performed for the governance or UI presentation changes.
+
+## Decision presentation change
+
+The UI shows `Model decision` (PHISHING / UNCERTAIN / LEGITIMATE / UNAVAILABLE)
+and `Combined signal score` as separate metrics. It removes the generic risk-level
+metric rather than inflating scores or altering thresholds to force agreement.
+PHISHING has an explicit warning, UNCERTAIN explains abstention, LEGITIMATE is
+qualified as unverified, and model absence cannot look like a legitimate verdict.
+Scores and threshold values are displayed as scores, not percentage probabilities.
+
+The additive calculation and legacy `risk_level` response field are unchanged.
+Python clients must treat that field as a score band, not a model decision or
+safety conclusion. Migration of that legacy API is outside this UI fix.
+Offline AppTest regressions exercise all model decisions, both exact threshold
+boundaries, no-model mode, other signals with a LEGITIMATE prediction, and invalid
+input. Models are fake, resource caches are isolated, and network/live checks
+are blocked. This verifies presentation, not predictive quality.
+
+Validation: pre-change suites passed 63 tests on each of Python 3.10.22, 3.11.17
+and 3.12.14. After the UI change, **71 tests passed on each version**, including
+eight AppTest cases; compilation and `pip check` passed on all three. The five
+parameterized decision/threshold regressions fail against the original audited
+UI and pass with this change. No model/data/threshold code was changed.
 
 ## Open risk register
 
-These are open findings, not completed fixes. Behavioral reproductions used
-offline synthetic inputs; network findings are code-review observations.
+R1's UI presentation fix is implemented; the remaining findings are open.
+Behavioral reproductions used offline synthetic inputs; network findings are
+code-review observations.
 
 | ID / priority | Finding and evidence | Required acceptance check |
 | --- | --- | --- |
-| R1 / P0 | `analyzer.py` and `model.predict`: a synthetic PHISHING decision can accompany 25/100 LOW; passive maximum 55 cannot reach HIGH. UNCERTAIN can also accompany LOW. | Define coherent presentation semantics; cover all ML outcomes and missing model without changing v2.1 thresholds. |
+| R1 / P0, UI resolved | Legacy score bands can differ from model decisions; passive maximum 55 cannot reach HIGH. UI now shows model decisions with explicit notices and separate signal scores, without a generic risk verdict. | Offline UI regressions cover all decisions, missing model and threshold boundaries. Legacy Python score-band compatibility remains documented; no threshold changes. |
 | R2 / P0 | Holdout CLIs check version `2.1.0` and write a fixed training commit without verifying model identity. Frozen source checkout does not freeze dependencies or dataset bytes. | Verify trusted model/metadata/data/code identities and record the actual environment before claiming frozen evaluation. |
 | R3 / P0 | `prospective_holdout.date_utc/select_phishing` accepts naive timestamps, future records and reversed submission/verification ordering. | Require explicit UTC and cutoff <= submission <= verification <= evaluation time; test boundaries deterministically. |
 | R4 / P0 | `model.load_csv` casts labels to int before checking membership; synthetic 0.5/1.5 become 0/1. | Reject non-binary labels before lossy conversion; retain valid cleaning behavior. |
@@ -98,9 +123,9 @@ tests where behavior changes, and Python 3.10/3.11/3.12 checks.
 1. **P0: governance and status (this documentation change).** Add `AGENTS.md`
    and this evidence/risk register; reconcile stale evaluation status text.
    No application or experiment behavior changes.
-2. **P0: decision presentation (R1).** Separate model decision, heuristic score,
-   uncertainty and missing evidence clearly; verify rendered Streamlit results
-   with fake models and no network. Preserve model parameters and thresholds.
+2. **P0: decision presentation (R1), implemented.** Separate model decision,
+   signal score, uncertainty and model absence; verify rendered Streamlit results
+   with fake models and no network. Model parameters and thresholds are preserved.
 3. **P0: evaluation integrity (R2/R3/R4).** Introduce verified experiment
    identities, strict temporal validation and lossless label checks. Preserve
    the registered cutoff and keep independent final data untouched.
