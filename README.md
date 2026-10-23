@@ -51,7 +51,7 @@ score band; it must not override `analyze()['ml']['label']` or imply safety.
 python -m pip install -r requirements-train.txt
 python scripts/download_uci.py
 python scripts/train_model.py --csv data/phiusiil_urls.csv
-streamlit run app.py
+# Complete the approved package setup in PUBLISHING.md before UI predictions.
 ```
 
 The training script accepts any CSV with these columns:
@@ -69,6 +69,14 @@ evaluators require [approved frozen artifact identities](docs/FROZEN_MODEL_IDENT
 and explicit UTC timestamps; these checks do not change model thresholds.
 
 `train_model.py` writes `models/url_phishing_model.pkl` and `models/url_model_meta.json`, including validation decision thresholds, URL cleaning audit, domain split counts, selective three-way test metrics, PR-AUC, and clearly labelled forced-binary baseline metrics. Both files are **ignored by git**. Only load model artifacts you trained yourself; Python `joblib` serialization can execute code when loading untrusted files.
+
+Training output alone no longer enables UI predictions. The application requires
+an approved v2.1 manifest, matching environment and
+`PHISHING_MODEL_MANIFEST_SHA256` trust anchor before deserialization. Missing
+packages use explicit demo mode; partial/corrupt/unapproved packages disable
+predictions with a recoverable notice. See the [operator runbook](PUBLISHING.md)
+for the three serving variables, approval, smoke checks and recovery. No training
+CSV is needed by the serving UI; evaluator verification still checks it.
 
 Re-running on the full dataset can take time. The default feature dimensions and evaluation parameters are documented in `src/phishing_analyzer/model.py`.
 

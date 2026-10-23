@@ -96,11 +96,11 @@ def create_manifest(source_root, model_dir, uci_csv):
     }
 
 
-def load_verified_model(model_dir, uci_csv, manifest_path, expected_manifest_sha256):
-    """Check the trusted envelope and all inputs BEFORE deserializing pickle.
+def verify_model_bundle(model_dir, manifest_path, expected_manifest_sha256, *, uci_csv=None):
+    """Return verified bytes/metadata/identity without deserializing the model.
 
-    Deserialize the exact verified buffer so a later pathname replacement cannot
-    change which model is loaded. The general-purpose app loader is unchanged.
+    Evaluators supply the original UCI CSV. Serving verifies the approved model
+    and metadata without requiring a copy of the training corpus at runtime.
     """
     if not isinstance(expected_manifest_sha256, str) or not re.fullmatch(
             r"[0-9a-f]{64}", expected_manifest_sha256):
@@ -128,9 +128,17 @@ def load_verified_model(model_dir, uci_csv, manifest_path, expected_manifest_sha
     meta_data = (target / META_FILE).read_bytes()
     if (hashlib.sha256(model_data).hexdigest() != hashes["model"]
             or hashlib.sha256(meta_data).hexdigest() != hashes["metadata"]
-            or sha256_file(uci_csv) != hashes["uci_csv"]):
+            or (uci_csv is not None and sha256_file(uci_csv) != hashes["uci_csv"])):
         raise ValueError("Frozen artifact or UCI digest mismatch")
     meta = _metadata(meta_data)
-    model = joblib.load(io.BytesIO(model_data))
     provenance = {**manifest, "manifest_sha256": expected_manifest_sha256}
-    return model, meta, provenance
+    return model_data, meta, provenance
+
+
+def load_verified_model(model_dir, uci_csv, manifest_path, expected_manifest_sha256):
+    """Verify all evaluation inputs before loading the exact approved buffer."""
+    if uci_csv is None:
+        raise ValueError("Original UCI CSV is required for evaluation")
+    data, meta, provenance = verify_model_bundle(
+        model_dir, manifest_path, expected_manifest_sha256, uci_csv=uci_csv)
+    return joblib.load(io.BytesIO(data)), meta, provenance

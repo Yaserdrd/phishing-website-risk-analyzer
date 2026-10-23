@@ -55,6 +55,12 @@ def test_matching_bundle_loads_and_reports_identity(bundle):
     assert provenance['training_commit'] == identity.FROZEN_COMMIT
 
 
+def test_evaluation_cannot_omit_training_csv_after_serving_refactor(bundle, monkeypatch):
+    monkeypatch.setattr(identity.joblib, 'load', lambda _: pytest.fail('Evaluation skipped UCI identity'))
+    with pytest.raises(ValueError, match='UCI CSV is required'):
+        identity.load_verified_model(bundle[0], None, bundle[2], bundle[4])
+
+
 @pytest.mark.parametrize('target', ['manifest', 'model', 'metadata', 'uci', 'environment', 'commit', 'version', 'schema', 'hash'])
 def test_tampered_or_incompatible_bundle_never_deserializes(bundle, monkeypatch, target):
     models, uci, path, manifest, digest, write = bundle

@@ -26,6 +26,15 @@ pathname. Reports include this identity, the approved manifest digest and hashes
 of the actual evaluator Python files plus its Git HEAD. Actual file hashes also
 identify locally modified evaluator code; HEAD alone is not treated as proof.
 
+The Streamlit serving path now shares artifact/metadata/environment verification
+before loading a model. It additionally guards the estimator/output contract and
+does not need the UCI training file at runtime; its identity is retained in the
+approved manifest rather than reverified against CSV bytes there. The two offline
+evaluators still require and verify the UCI CSV. See the [operator runbook](../PUBLISHING.md)
+for serving configuration and controlled missing/blocked-model behavior. The
+legacy research `model.load_model` helper remains trusted-input-only and is not
+the serving entry point.
+
 This does not attest that training actually ran, authenticate the operator,
 verify dependency installation contents beyond recorded versions/PSL, validate
 label truth or protect files against a malicious concurrent local process. Keep

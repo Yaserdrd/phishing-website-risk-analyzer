@@ -9,13 +9,20 @@ as described below. Model implementation and thresholds remain **v2.1.0**.
 The environment supports development and testing. This does not establish
 real-world detection quality or deployment security. See [agent instructions](../AGENTS.md).
 
+The subsequent `feature/trusted-serving-and-recovery` delivery implements a
+verified serving entry point, guarded probability contract and recoverable UI
+states. It does not retrain/change v2.1, approve a real model artifact or remove
+external-validation/deployment blockers. See the eight-area
+[product quality review and acceptance plan](PRODUCT_QUALITY_REVIEW.md).
+
 ## Architecture and implemented capabilities
 
 | Component | Responsibility | Current boundary |
 | --- | --- | --- |
-| `app.py` | Streamlit input, results, warnings | Model decision separate from signal score; UNAVAILABLE in demo mode; live checks off by default |
+| `app.py` | Streamlit input, results, warnings | Separate decision/score; missing/blocked/verified model states, empty/loading/retry guidance and explicit inference fallback; live checks off by default |
 | `src/phishing_analyzer/urls.py` | Normalization, validation, registrable-domain grouping | Shared train/inference normalization; bundled offline PSL |
 | `src/phishing_analyzer/model.py` | URL/hostname character TF-IDF + Logistic Regression | Exact binary labels checked before conversion; fit/split/threshold algorithms unchanged |
+| `src/phishing_analyzer/serving.py` | Approved serving package and inference output contract | Missing installation is demo; invalid/configured-missing package blocks predictions; trusted manifest required before unpickling |
 | `src/phishing_analyzer/protocol.py`, `provenance.py` | Shared UTC policy and frozen artifact verification | Approved manifest trust anchor required; a digest does not authenticate its supplier |
 | `src/phishing_analyzer/analyzer.py` | Combine ML, heuristics, optional checks | Legacy `risk_level` retained for callers as a score band; UI does not present it as a verdict |
 | `src/phishing_analyzer/security.py` | Lexical, TLS, RDAP, bounded HTML signals | Opt-in network code; hardening gaps listed below |
@@ -80,6 +87,18 @@ certificate failures, bounded DNS capacity, slow headers/body/chunk framing,
 size/framing failures, socket cleanup, RDAP restrictions and shared budgets.
 No real submitted/feed URL or RDAP endpoint was contacted. These are application
 regressions, not a penetration test or deployment acceptance result.
+
+Trusted serving/recovery started with 164 passing tests per Python version and
+finished with **191 passing tests on each of Python 3.10.22, 3.11.17 and 3.12.14**;
+compileall and pip check passed on all three. Shared verification still requires
+the UCI CSV for evaluators while the serving UI needs only approved model/metadata
+and manifest. Serving validates estimator/output shape, finite values and binary
+probability sums. Package and prediction failures produce explicit unavailable/
+demo states without raw error text or duplicate live checks. Cache revisions
+detect package installation/replacement on rerun. Chromium mobile/desktop form
+checks and explicit reload after a local server restart passed; full accessibility,
+automatic reconnect, production performance and real-model acceptance remain open.
+See the [quality review](PRODUCT_QUALITY_REVIEW.md) and [operator runbook](../PUBLISHING.md).
 
 ## Decision presentation change
 
