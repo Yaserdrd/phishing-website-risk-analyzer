@@ -1,6 +1,10 @@
 # Validation-only uncertainty policy (v2.1)
 
-**Research status:** Implementation and synthetic unit tests are available; full UCI retraining must complete before claiming held-out v2.1 results. [Previously verified v2.0 metrics](VERIFIED_RESULTS_2026-10-21.md) are **not** v2.1 metrics.
+**Research status:** The completed v2.1 UCI run and dataset-specific results are
+recorded in the [verified v2.1 report](VERIFIED_RESULTS_V21_2026-10-21.md).
+[Previously verified v2.0 metrics](VERIFIED_RESULTS_2026-10-21.md) are **not**
+v2.1 metrics. External production performance remains unverified; see
+[current status and open risks](PROJECT_STATUS.md).
 
 ## Why change?
 
