@@ -169,10 +169,16 @@ def test_holdout_cli_uses_verified_identity_and_emits_aggregates(bundle, monkeyp
                         'https://new.test/,yes,yes,2026-10-24T00:00:00Z,2026-10-25T00:00:00Z\n')
         extra = ['--phishing-csv', str(data), '--min-count', '1']
     else:
-        data.write_text('url,label,observed_at_utc,verified_at_utc,evidence_ref,reviewer_id\n'
-                        'https://new.test/,PHISHING,2026-10-24T00:00:00Z,2026-10-25T00:00:00Z,ref1,a\n'
-                        'https://other.test/,LEGITIMATE,2026-10-24T00:00:00Z,2026-10-25T00:00:00Z,ref2,b\n')
-        extra = ['--vetted-csv', str(data), '--min-per-class', '1']
+        import review_consensus as rc
+        reviews = tmp_path / 'reviews.csv'
+        reviews.write_text('url,label,observed_at_utc,verified_at_utc,evidence_ref,reviewer_id\n' + ''.join(
+            f'https://{host}.test/,{label},2026-10-24T00:00:00Z,2026-10-25T00:00:00Z,ref-{reviewer},{reviewer}\n'
+            for host, label in [('new', 'PHISHING'), ('other', 'LEGITIMATE')]
+            for reviewer in ['a', 'b']))
+        rows, _ = rc.adjudicate(reviews, now=NOW)
+        data.write_bytes(rc.vetted_bytes(rows))
+        extra = ['--vetted-csv', str(data), '--min-per-class', '1',
+                 '--reviews', str(reviews), '--reviews-sha256', identity.sha256_file(reviews)]
     monkeypatch.setattr(module, 'evaluation_time', lambda now=None: NOW if now is None else now)
     monkeypatch.setattr(module, 'predict', lambda url, *_: {
         'label': 'LEGITIMATE' if 'other.test' in url else 'PHISHING'})
@@ -184,6 +190,11 @@ def test_holdout_cli_uses_verified_identity_and_emits_aggregates(bundle, monkeyp
     assert report['frozen_training_commit'] == identity.FROZEN_COMMIT
     assert 'src/phishing_analyzer/protocol.py' in report['evaluation_code']['files_sha256']
     assert 'https://new.test' not in output.read_text()
+    if module is vetted:
+        assert report['protocol'] == 'prospective-vetted-two-class-v2'
+        assert report['review_provenance']['source_sha256'] == identity.sha256_file(reviews)
+        assert report['review_provenance']['counts']['accepted'] == 2
+        assert all(secret not in output.read_text() for secret in ['ref-a', 'ref-b', str(reviews)])
     # A stale/bad trust anchor must not produce a new report.
     output.unlink()
     monkeypatch.setattr(sys, 'argv', [arg if arg != digest else '0' * 64 for arg in sys.argv])

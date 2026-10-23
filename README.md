@@ -82,6 +82,11 @@ Re-running on the full dataset can take time. The default feature dimensions and
 
 ### Verify locally
 
+For reproducible Linux x86_64 development/research installations, use the
+[hash-locked environment instructions](docs/REPRODUCIBLE_ENVIRONMENTS.md) for
+Python 3.10, 3.11 or 3.12. CI uses those locks. The range-based commands below
+remain a flexible installation path, not an identical dependency snapshot.
+
 ```bash
 python -m pip install -r requirements-dev.txt
 PYTHONPATH=src pytest -q              # macOS / Linux
