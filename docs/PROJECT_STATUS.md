@@ -19,6 +19,7 @@ real-world detection quality or deployment security. See [agent instructions](..
 | `src/phishing_analyzer/protocol.py`, `provenance.py` | Shared UTC policy and frozen artifact verification | Approved manifest trust anchor required; a digest does not authenticate its supplier |
 | `src/phishing_analyzer/analyzer.py` | Combine ML, heuristics, optional checks | Legacy `risk_level` retained for callers as a score band; UI does not present it as a verdict |
 | `src/phishing_analyzer/security.py` | Lexical, TLS, RDAP, bounded HTML signals | Opt-in network code; hardening gaps listed below |
+| `src/phishing_analyzer/network.py` | Public-IP-pinned transport, resource bounds and shared deadlines | Direct sockets; no RDAP redirects; bounded DNS workers may outlive caller timeouts |
 | `scripts/evaluate_external.py` | Separate-source audit and paired URL/root diagnostics | Exploratory; no inherited ground truth for synthetic roots |
 | `scripts/prospective_holdout.py` | Post-cutoff positive-only evaluation | Explicit UTC/order/current-time filtering and pre-unpickle identity gate |
 | `scripts/evaluate_vetted_holdout.py` | Evidence-reviewed two-class evaluation | Metadata validation does not verify evidence truth or mandatory dual review |
@@ -71,6 +72,15 @@ local documentation links were checked. Workflow YAML parsed successfully and
 the identity-pin step precedes feed acquisition; the remote workflow was not run.
 Tests use temporary safe fake artifacts, not a real frozen v2.1 artifact.
 
+The live-network hardening change started with **117 passing tests on each of
+Python 3.10.22, 3.11.17 and 3.12.14**. Afterwards **164 tests passed on each
+version**, with successful source compilation and `pip check`. New tests use
+fake DNS/sockets/TLS/responses and clocks to cover SSRF redirects, IP pinning,
+certificate failures, bounded DNS capacity, slow headers/body/chunk framing,
+size/framing failures, socket cleanup, RDAP restrictions and shared budgets.
+No real submitted/feed URL or RDAP endpoint was contacted. These are application
+regressions, not a penetration test or deployment acceptance result.
+
 ## Decision presentation change
 
 The UI shows `Model decision` (PHISHING / UNCERTAIN / LEGITIMATE / UNAVAILABLE)
@@ -96,7 +106,8 @@ UI and pass with this change. No model/data/threshold code was changed.
 
 ## Open risk register
 
-R1's UI fix, R3/R4 input validation and R2's per-build identity gate are implemented.
+R1's UI fix, R3/R4 input validation, R2's per-build identity gate and R5's
+application transport hardening are implemented.
 Historical artifact identity and broader reproducibility remain unverified.
 Behavioral reproductions used offline synthetic inputs; network findings are
 code-review observations.
@@ -107,7 +118,7 @@ code-review observations.
 | R2 / P0, integrity gate implemented | Both CLIs now require an approved manifest digest, bind model/metadata/UCI bytes and runtime/PSL identity before unpickling, and record actual evaluator code hashes. The workflow pins the same-run build before feed acquisition. | Offline tampering/CLI tests pass. This does not authenticate a self-supplied manifest or establish identity with a historical model; preserve a trusted approved manifest/environment for cross-run claims. |
 | R3 / P0, resolved | Shared UTC parser and cutoff <= observation/submission <= verification <= captured evaluation time rule used by both evaluators and review consensus. Invalid feed records cannot satisfy minimum counts. | Fixed-clock tests cover naive/non-UTC, future, reversed, cutoff and evaluation-time boundaries. |
 | R4 / P0, resolved | CSV labels are checked with exact decimal semantics before integer conversion; fractions, infinities, underflow and near-integer rounding are rejected. | Invalid-label and valid binary cleaning tests pass; fitting, splitting and thresholds are unchanged. |
-| R5 / P1, deployment blocker | RDAP follows redirects outside the pinned HTML/TLS path. Per-socket timeouts do not bound total operation time. Redirect, pinning, body and TLS tests are incomplete. | Mocked adversarial tests; explicit destination policy, response bounds and overall deadlines; external egress isolation before deployment. |
+| R5 / P1, transport implemented; deployment controls pending | Shared 12-second network budget, bounded DNS wait/capacity, public-unicast pinning, revalidated HTML redirects with no HTTPS downgrade, bounded identity-only responses, and fixed RDAP endpoint without redirects. Missing network evidence adds no risk. | Offline adversarial tests cover redirect/SSRF, pinning/TLS, slow headers/body/chunks, wire/body bounds and cleanup. Registry redirects now leave age unavailable. External egress isolation, rate limits and deployment validation remain required. |
 | R6 / P1, evaluation prerequisite | Evaluator accepts nonempty single reviewer IDs; consensus output is not a mandatory input gate. Private output location is a documented convention. | Bind evaluation to reviewed consensus provenance and prevent private outputs in the checkout; retain independent human evidence verification. |
 | R7 / P1 | Dependency ranges, changing feeds/PSL and short-lived artifacts limit repeatability. Some older documents contain pre-verification status text. | Reproducible dependency resolution and experiment manifests; reconcile status with durable aggregate evidence. |
 
@@ -145,8 +156,10 @@ tests where behavior changes, and Python 3.10/3.11/3.12 checks.
    temporal validation and exact label checks. The registered cutoff and final
    data remain untouched. See [frozen identity](FROZEN_MODEL_IDENTITY.md);
    historical artifact approval and cross-run reproducibility are not claimed.
-4. **P1: network hardening (R5).** Add deterministic tests and bounded,
-   policy-controlled network adapters. Document deployment isolation requirements.
+4. **P1: network hardening (R5), application layer implemented.** Deterministic
+   tests and bounded public-IP-pinned transport cover opt-in live checks. See
+   [security notes](../SECURITY.md) for RDAP availability, DNS cancellation,
+   direct-socket and deployment-isolation limitations. No live site was visited.
 5. **P1: reproducibility (R7).** Record dependency, PSL, source and artifact
    identities; version report schemas and preserve aggregate evidence durably.
 6. **P1: reviewed holdout process (R6).** Enforce consensus provenance and private
