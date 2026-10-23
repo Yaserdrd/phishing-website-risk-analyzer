@@ -146,7 +146,7 @@ code-review observations.
 | R4 / P0, resolved | CSV labels are checked with exact decimal semantics before integer conversion; fractions, infinities, underflow and near-integer rounding are rejected. | Invalid-label and valid binary cleaning tests pass; fitting, splitting and thresholds are unchanged. |
 | R5 / P1, transport implemented; deployment controls pending | Shared 12-second network budget, bounded DNS wait/capacity, public-unicast pinning, revalidated HTML redirects with no HTTPS downgrade, bounded identity-only responses, and fixed RDAP endpoint without redirects. Missing network evidence adds no risk. | Offline adversarial tests cover redirect/SSRF, pinning/TLS, slow headers/body/chunks, wire/body bounds and cleanup. Registry redirects now leave age unavailable. External egress isolation, rate limits and deployment validation remain required. |
 | R6 / P1, software gate implemented | Evaluator requires approved raw review digest, recomputes dual-review consensus and compares exact vetted bytes before model loading/scoring. Private review/CSV paths reject checkout and symlink destinations; outputs refuse overwrite. | Offline tampering, single-review, dispute, private-path and CLI regressions; real independent identity/evidence approval and corpus collection remain required. Digests do not authenticate reviewers. |
-| R7 / P1 | Dependency ranges, changing feeds/PSL and short-lived artifacts limit repeatability. Some older documents contain pre-verification status text. | Reproducible dependency resolution and experiment manifests; reconcile status with durable aggregate evidence. |
+| R7 / P1, dependency locks validated; artifact lifecycle open | Linux x86_64 locks pin the complete development/research graph separately for Python 3.10/3.11/3.12 with package hashes. CI/research installs now require hashes and wheels, check lock/input identities and pip consistency. External data, interpreter/OS and short-lived model artifacts remain separate reproducibility risks. | Fresh locked environments passed all tests; retain immutable approved model/data/environment identities and rollback before real-package serving acceptance. See [locked environments](REPRODUCIBLE_ENVIRONMENTS.md). |
 
 The subsequent `feature/enforced-review-provenance` change implements R6's
 software gate. The vetted evaluator requires `--reviews` and an independently
@@ -208,8 +208,9 @@ tests where behavior changes, and Python 3.10/3.11/3.12 checks.
    tests and bounded public-IP-pinned transport cover opt-in live checks. See
    [security notes](../SECURITY.md) for RDAP availability, DNS cancellation,
    direct-socket and deployment-isolation limitations. No live site was visited.
-5. **P1: reproducibility (R7).** Record dependency, PSL, source and artifact
-   identities; version report schemas and preserve aggregate evidence durably.
+5. **P1: reproducibility (R7), dependency locks validated.** Linux x86_64
+   Python 3.10–3.12 locked installations are tested; durable approved model/data
+   storage, interpreter/OS identity, rollback and real serving acceptance remain open.
 6. **P1: reviewed holdout process (R6), software gate implemented.** Approved
    review bytes, recomputed consensus and private-path checks are enforced;
    collect and verify data under a blind, preregistered protocol, then
