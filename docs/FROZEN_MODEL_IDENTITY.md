@@ -83,7 +83,9 @@ PYTHONPATH=src python scripts/prospective_holdout.py \
   --min-count 200 --out reports/prospective_holdout.json
 ```
 
-Use the same identity arguments for `evaluate_vetted_holdout.py`. A missing trust
+Use the same model identity arguments for `evaluate_vetted_holdout.py`, plus the
+mandatory original `--reviews` and independently approved `--reviews-sha256` from
+the [dual-review workflow](INDEPENDENT_REVIEW_PROTOCOL.md). A missing trust
 anchor, changed artifact/UCI input, changed environment or incompatible metadata
 blocks loading/evaluation. Do not disable checks or rewrite expected digests to
 make a failing run pass. Keep raw evidence and URL lists outside the repository.
