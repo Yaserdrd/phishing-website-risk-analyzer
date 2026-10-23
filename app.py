@@ -13,7 +13,7 @@ def main():
     st.set_page_config(page_title="Phishing Website Risk Analyzer", page_icon="🛡️", layout="centered")
     st.title("🛡️ Phishing Website Risk Analyzer")
     st.caption("URL text classification, transparent heuristics, and optional active network checks")
-    st.info("Research prototype: a LOW risk score does **not** prove that a website is safe.")
+    st.info("Research prototype: model decisions and signal scores do **not** prove that a website is safe.")
     @st.cache_resource
     def cached_model():
         return load_model(ROOT / "models")
@@ -37,15 +37,29 @@ def main():
         st.error(f"Invalid URL: {exc}")
         return
     col1, col2 = st.columns(2)
-    col1.metric("Combined risk score", f"{result['risk_score']} / 100")
-    col2.metric("Risk level", result["risk_level"])
+    ml = result["ml"]
+    col1.metric("Model decision", ml["label"] if ml else "UNAVAILABLE")
+    col2.metric("Combined signal score", f"{result['risk_score']} / 100")
+    st.caption("The signal score combines additive heuristics and any model contribution. "
+               "It is not a phishing probability and does not override the model decision.")
     st.progress(result["risk_score"] / 100)
-    if result["ml"]:
-        if result["ml"]["label"] == "UNCERTAIN":
-            st.warning("ML result is UNCERTAIN. Do not treat a low heuristic score as proof this URL is safe.")
+    if ml:
+        if ml["label"] == "PHISHING":
+            st.error("Model decision: PHISHING. A low signal score does not cancel this warning. "
+                     "This model decision may be wrong; it is not a verified threat finding.")
+        elif ml["label"] == "UNCERTAIN":
+            st.warning("Model decision: UNCERTAIN. The model abstained; a low signal score "
+                       "does not establish safety.")
+        else:
+            st.info("Model decision: LEGITIMATE. This is a model prediction, not verified "
+                    "legitimacy or a safety guarantee. Review the other signals separately.")
         st.subheader("Machine learning")
-        st.write(f"**{result['ml']['label']}** | Model phishing score: {result['ml']['probability']:.1%}")
-        st.caption(f"LEGITIMATE ≤ {result['ml']['low']:.0%}; PHISHING ≥ {result['ml']['high']:.0%}; otherwise UNCERTAIN")
+        st.write(f"Model phishing score: {ml['probability']:.6f}")
+        st.caption(f"Score thresholds: LEGITIMATE ≤ {ml['low']:.6f}; PHISHING ≥ {ml['high']:.6f}; "
+                   "otherwise UNCERTAIN. Scores are not calibrated probabilities.")
+    else:
+        st.warning("Model decision unavailable. Heuristic-only demo; the signal score "
+                   "cannot establish whether this URL is phishing or legitimate.")
     st.subheader("Signals")
     st.write("Scores are additive heuristics, **not calibrated probabilities**.")
     st.json(result["score_parts"])

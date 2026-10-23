@@ -33,6 +33,15 @@ streamlit run app.py
 
 Without a `models/url_phishing_model.pkl`, the app starts in **explicit heuristic-only demo mode**. This is intentional: you should not rely on or publish an unverified model. No website is contacted unless the **live checks** checkbox is enabled. The optional active checks contact the submitted website and the public RDAP service.
 
+The result displays the **model decision** separately from the **combined signal
+score**. `PHISHING` remains a warning even with a small signal score; `UNCERTAIN`
+means the model abstained; `LEGITIMATE` is an unverified prediction, not a safety
+guarantee. Without a model the decision is `UNAVAILABLE`. The signal score keeps
+the existing additive calculation, including any model contribution, and is not
+a phishing probability. The UI no longer shows a LOW/MEDIUM/HIGH risk verdict.
+For existing Python callers, `analyze()['risk_level']` remains a legacy numeric
+score band; it must not override `analyze()['ml']['label']` or imply safety.
+
 ### Train your own ML model
 
 ```bash
