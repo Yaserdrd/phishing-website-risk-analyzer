@@ -13,6 +13,9 @@ This project evolved from a Jupyter/Google Colab experiment comparing **Decision
 - **Domain-disjoint evaluation (v2):** `GroupShuffleSplit` by registrable domain (eTLD+1 using the Public Suffix List), with fit / validation / held-out test partitions. Sibling subdomains are kept together. Validation independently selects both decision thresholds; test data are untouched until final scoring.
 - **Three-way output:** `PHISHING` / `UNCERTAIN` / `LEGITIMATE` with independently recorded thresholds.
 - **Transparent risk breakdown:** URL heuristics plus optional live TLS, RDAP, HTML analysis. Live lookups are OFF by default.
+- **Bounded live inspection:** shared 12-second network budget, pinned connections,
+  body/wire limits, and no RDAP redirects. Network failures add no risk points;
+  redirected RDAP responses leave domain age unavailable. See [security notes](SECURITY.md).
 - **SSRF precautions:** active requests accept only HTTP/HTTPS on ports 80/443, reject private/reserved DNS results, connect to a validated pinned public IP, and revalidate every redirect. Bounded response body, redirect count and socket timeouts.
 - **Test suite and GitHub Actions** for URL normalization, private IP protections, basic HTML signals, training and application behavior.
 
