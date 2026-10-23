@@ -11,10 +11,12 @@ import hashlib
 import io
 import json
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
 from pathlib import Path
+import sys
 
-from evaluate_vetted_holdout import CUTOFF, parse_time
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from phishing_analyzer.protocol import CUTOFF, evaluation_time, parse_time, valid_window
 from phishing_analyzer.urls import normalize_url, domain_group
 
 REQUIRED = {
@@ -30,9 +32,7 @@ def adjudicate(csv_path, *, now=None, cutoff=CUTOFF):
     Each distinct URL requires two independent reviewer IDs, both agreeing on label.
     Disagreements are excluded, not silently decided. Dates may not precede cutoff.
     """
-    current = now or datetime.now(timezone.utc)
-    if current.tzinfo is None:
-        raise ValueError("now must be timezone-aware")
+    current = evaluation_time(now)
     data = Path(csv_path).read_bytes()
     if len(data) > MAX_BYTES:
         raise ValueError("Review file exceeds size limit")
@@ -56,7 +56,7 @@ def adjudicate(csv_path, *, now=None, cutoff=CUTOFF):
             raise ValueError(f"Row {line}: invalid label")
         if not reviewer or not evidence or "\n" in reviewer or "\n" in evidence or "|" in reviewer or "|" in evidence:
             raise ValueError(f"Row {line}: missing or unsafe reviewer/evidence")
-        if not (cutoff <= observed <= verified <= current):
+        if not valid_window(observed, verified, current, cutoff):
             raise ValueError(f"Row {line}: invalid review timestamps")
         if any(old["reviewer"] == reviewer for old in reviews[url]):
             raise ValueError(f"Row {line}: duplicate reviewer for URL")

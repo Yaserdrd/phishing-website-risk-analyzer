@@ -1,19 +1,17 @@
 """Frozen prospective positive-only PhishTank audit. Never visits URLs from input."""
 import argparse,csv,gzip,hashlib,io,json,sys
 from collections import Counter
-from datetime import datetime,timezone
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"src"))
-from phishing_analyzer.model import load_model,predict
+from phishing_analyzer.model import predict
+from phishing_analyzer.provenance import evaluation_code_identity, load_verified_model
+from phishing_analyzer.protocol import CUTOFF, evaluation_time, parse_time, valid_window
 from phishing_analyzer.urls import normalize_url,domain_group
-CUTOFF=datetime(2026,10,23,tzinfo=timezone.utc)
 
 def date_utc(value):
-    if not isinstance(value,str) or not value.strip():return None
     try:
-        d=datetime.fromisoformat(value.strip().replace("Z","+00:00"))
-        return d.replace(tzinfo=timezone.utc) if d.tzinfo is None else d.astimezone(timezone.utc)
+        return parse_time(value)
     except ValueError:return None
 
 def uci_groups(csv_path):
@@ -27,8 +25,10 @@ def uci_groups(csv_path):
             except (ValueError,TypeError):pass
     return groups
 
-def select_phishing(path,excluded,min_count=200):
+def select_phishing(path,excluded,min_count=200, *, now=None):
     if min_count<1:raise ValueError("min_count must be positive")
+    current = evaluation_time(now)
+    if current < CUTOFF:raise ValueError("Prospective cutoff has not yet arrived")
     raw=Path(path).read_bytes()
     if len(raw)>20_000_000:raise ValueError("Archive too large")
     with (gzip.GzipFile(fileobj=io.BytesIO(raw)) if raw[:2]==b"\x1f\x8b" else io.BytesIO(raw)) as fh:
@@ -45,6 +45,8 @@ def select_phishing(path,excluded,min_count=200):
         submitted=date_utc(row.get("submission_time"));verified=date_utc(row.get("verification_time"))
         if submitted is None or verified is None:counts["missing_dates"]+=1;continue
         if submitted<CUTOFF or verified<CUTOFF:counts["predates_cutoff"]+=1;continue
+        if not valid_window(submitted, verified, current):
+            counts["invalid_time_order_or_future"]+=1;continue
         try:url=normalize_url(row["url"])
         except (ValueError,TypeError):counts["invalid_url"]+=1;continue
         if url in seen:counts["duplicates"]+=1;continue
@@ -59,18 +61,22 @@ def main():
     p=argparse.ArgumentParser()
     for flag in ("uci-csv","phishing-csv"):p.add_argument("--"+flag,required=True)
     p.add_argument("--model-dir",default="frozen/models")
+    p.add_argument("--manifest", required=True)
+    p.add_argument("--manifest-sha256", required=True, help="Digest approved through a trusted build/review channel")
     p.add_argument("--min-count",type=int,default=200)
     p.add_argument("--out",default="reports/prospective_holdout.json")
     a=p.parse_args()
-    if datetime.now(timezone.utc)<CUTOFF:p.error("Pre-registered future cutoff has not arrived")
-    model,meta=load_model(a.model_dir)
-    if model is None or meta.get("version")!="2.1.0":p.error("Frozen trusted v2.1 model missing")
-    urls,selection,digest=select_phishing(a.phishing_csv,uci_groups(a.uci_csv),a.min_count)
+    current = evaluation_time()
+    if current<CUTOFF:p.error("Pre-registered future cutoff has not arrived")
+    model,meta,identity=load_verified_model(a.model_dir, a.uci_csv, a.manifest, a.manifest_sha256)
+    urls,selection,digest=select_phishing(a.phishing_csv,uci_groups(a.uci_csv),a.min_count,now=current)
     decisions=Counter(predict(url,model,meta)["label"] for url in urls)
     count=len(urls)
     report={"protocol":"preregistered-positive-holdout-v1","cutoff_utc":CUTOFF.isoformat(),
-        "checked_at_utc":datetime.now(timezone.utc).isoformat(),
-        "frozen_training_commit":"9a3ced00d98a40773837e0f52aa236c9c1b3c45f",
+        "checked_at_utc":current.isoformat(),
+        "frozen_training_commit":identity["training_commit"],
+        "model_provenance":identity,
+        "evaluation_code":evaluation_code_identity(ROOT),
         "model_version":"2.1.0","feed_sha256":digest,"selection":selection,
         "positive_class_only":{"count":count,"decisions":{k:decisions[k] for k in ("PHISHING","UNCERTAIN","LEGITIMATE")},
          "detected_fraction":decisions["PHISHING"]/count,

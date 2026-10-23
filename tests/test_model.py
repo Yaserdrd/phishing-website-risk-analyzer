@@ -26,6 +26,37 @@ def test_csv_requires_labels(tmp_path):
         load_csv(file)
 
 
+@pytest.mark.parametrize('bad_label', [0.5, 1.5, -0.5, float('inf'), float('-inf'), 2])
+def test_csv_rejects_labels_before_lossy_integer_conversion(tmp_path, bad_label):
+    frame = sample_frame()
+    frame['label'] = frame['label'].astype(float)
+    frame.loc[0, 'label'] = bad_label
+    file = tmp_path / 'labels.csv'
+    frame.to_csv(file, index=False)
+    with pytest.raises(ValueError, match='Labels'):
+        load_csv(file)
+
+
+def test_csv_accepts_exact_numeric_binary_labels(tmp_path):
+    frame = sample_frame()
+    frame['label'] = frame['label'].astype(float)
+    file = tmp_path / 'labels.csv'
+    frame.to_csv(file, index=False)
+    result = load_csv(file)
+    assert result.label.tolist() == [i % 2 for i in range(90)]
+
+
+@pytest.mark.parametrize('label', ['1.00000000000000000001', '1e-999', 'not-a-label', 'True'])
+def test_csv_rejects_labels_that_float_parsing_would_round_or_coerce(tmp_path, label):
+    frame = sample_frame()
+    frame['label'] = frame.label.astype(str)
+    frame.loc[0, 'label'] = label
+    file = tmp_path / 'labels.csv'
+    frame.to_csv(file, index=False)
+    with pytest.raises(ValueError, match='Labels'):
+        load_csv(file)
+
+
 def test_csv_quarantines_conflicting_labels_and_tracks_duplicates(tmp_path):
     file = tmp_path / "mixed.csv"
     frame = sample_frame(30)

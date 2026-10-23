@@ -60,6 +60,11 @@ The training script accepts any CSV with these columns:
 
 Malformed URLs are excluded during CSV preparation, with duplicate normalized URLs removed; contradictory labels for the same normalized URL are quarantined and counted in the cleaning report.
 
+Labels are validated as exact numeric 0/1 values before integer conversion;
+fractional, non-finite and rounded near-binary inputs are rejected. Prospective
+evaluators require [approved frozen artifact identities](docs/FROZEN_MODEL_IDENTITY.md)
+and explicit UTC timestamps; these checks do not change model thresholds.
+
 `train_model.py` writes `models/url_phishing_model.pkl` and `models/url_model_meta.json`, including validation decision thresholds, URL cleaning audit, domain split counts, selective three-way test metrics, PR-AUC, and clearly labelled forced-binary baseline metrics. Both files are **ignored by git**. Only load model artifacts you trained yourself; Python `joblib` serialization can execute code when loading untrusted files.
 
 Re-running on the full dataset can take time. The default feature dimensions and evaluation parameters are documented in `src/phishing_analyzer/model.py`.

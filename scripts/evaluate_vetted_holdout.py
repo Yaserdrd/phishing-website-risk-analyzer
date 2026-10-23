@@ -9,29 +9,17 @@ import hashlib
 import json
 import sys
 from collections import Counter
-from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
-from phishing_analyzer.model import load_model, predict
+from phishing_analyzer.model import predict
+from phishing_analyzer.provenance import evaluation_code_identity, load_verified_model
+from phishing_analyzer.protocol import CUTOFF, evaluation_time, parse_time, valid_window
 from phishing_analyzer.urls import domain_group, normalize_url
 
-CUTOFF = datetime(2026, 10, 23, tzinfo=timezone.utc)
 CLASSES = ('PHISHING', 'UNCERTAIN', 'LEGITIMATE')
 REQUIRED = {'url', 'label', 'observed_at_utc', 'verified_at_utc', 'evidence_ref', 'reviewer_id'}
-
-
-def parse_time(value):
-    if not value or not value.strip():
-        raise ValueError('Missing UTC timestamp')
-    try:
-        date = datetime.fromisoformat(value.strip().replace('Z', '+00:00'))
-    except ValueError as e:
-        raise ValueError('Malformed UTC timestamp') from e
-    if date.tzinfo is None or date.utcoffset().total_seconds() != 0:
-        raise ValueError('Timestamp must carry UTC offset Z/+00:00')
-    return date.astimezone(timezone.utc)
 
 
 def load_vetted(path, excluded_domains, *, cutoff=CUTOFF, min_per_class=100, now=None):
@@ -41,7 +29,7 @@ def load_vetted(path, excluded_domains, *, cutoff=CUTOFF, min_per_class=100, now
     """
     if min_per_class < 1:
         raise ValueError('min_per_class must be positive')
-    current = now or datetime.now(timezone.utc)
+    current = evaluation_time(now)
     if current < cutoff:
         raise ValueError('Prospective cutoff has not yet arrived')
     rows = []
@@ -62,7 +50,7 @@ def load_vetted(path, excluded_domains, *, cutoff=CUTOFF, min_per_class=100, now
             raise ValueError(f'Row {i}: missing verification evidence')
         observed = parse_time(record['observed_at_utc'])
         verified = parse_time(record['verified_at_utc'])
-        if observed < cutoff or verified < cutoff or verified < observed or verified > current:
+        if not valid_window(observed, verified, current, cutoff):
             raise ValueError(f'Row {i}: timestamp violates prospective protocol')
         try:
             url = normalize_url(record['url'])
@@ -114,20 +102,25 @@ def main():
     parser.add_argument('--vetted-csv', required=True)
     parser.add_argument('--uci-csv', required=True)
     parser.add_argument('--model-dir', default='models')
+    parser.add_argument('--manifest', required=True)
+    parser.add_argument('--manifest-sha256', required=True, help='Digest approved through a trusted build/review channel')
     parser.add_argument('--min-per-class', type=int, default=100)
     parser.add_argument('--out', default='reports/vetted_holdout.json')
     args = parser.parse_args()
     from prospective_holdout import uci_groups
-    model, meta = load_model(args.model_dir)
-    if model is None or meta.get('version') != '2.1.0':
-        parser.error('Frozen trusted v2.1 model required')
-    records, provenance = load_vetted(args.vetted_csv, uci_groups(args.uci_csv), min_per_class=args.min_per_class)
+    current = evaluation_time()
+    if current < CUTOFF:
+        parser.error('Prospective cutoff has not yet arrived')
+    model, meta, identity = load_verified_model(args.model_dir, args.uci_csv, args.manifest, args.manifest_sha256)
+    records, provenance = load_vetted(args.vetted_csv, uci_groups(args.uci_csv), min_per_class=args.min_per_class, now=current)
     result = {
         'protocol': 'prospective-vetted-two-class-v1',
         'preregistered_cutoff_utc': CUTOFF.isoformat(),
         'model_version': meta['version'],
-        'frozen_training_commit': '9a3ced00d98a40773837e0f52aa236c9c1b3c45f',
-        'evaluated_at_utc': datetime.now(timezone.utc).isoformat(),
+        'frozen_training_commit': identity['training_commit'],
+        'model_provenance': identity,
+        'evaluation_code': evaluation_code_identity(ROOT),
+        'evaluated_at_utc': current.isoformat(),
         'corpus': provenance,
         'metrics': evaluate(records, model, meta),
         'limitations': [
