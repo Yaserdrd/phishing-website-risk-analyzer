@@ -1,11 +1,15 @@
 """Streamlit entry point; boots in transparent passive-demo mode without a model."""
 from pathlib import Path
+import logging
+import os
 import sys
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
 from phishing_analyzer.analyzer import analyze
-from phishing_analyzer.model import load_model
+from phishing_analyzer.serving import ModelUnavailable, load_app_model, model_revision
+
+LOGGER = logging.getLogger(__name__)
 
 
 def main():
@@ -14,27 +18,57 @@ def main():
     st.title("🛡️ Phishing Website Risk Analyzer")
     st.caption("URL text classification, transparent heuristics, and optional active network checks")
     st.info("Research prototype: model decisions and signal scores do **not** prove that a website is safe.")
-    @st.cache_resource
-    def cached_model():
-        return load_model(ROOT / "models")
+    @st.cache_resource(show_spinner=False)
+    def cached_model(directory, manifest, digest, required, revision):
+        """File revision participates in the cache key; content is verified on load."""
+        return load_app_model(directory, manifest, digest, required=required)
 
-    model, meta = cached_model()
-    if model is None:
-        st.warning("ML model not installed. Showing **heuristic-only demo**. Train the URL model first to enable predictions.")
+    directory = os.environ.get("PHISHING_MODEL_DIR") or str(ROOT / "models")
+    manifest = os.environ.get("PHISHING_MODEL_MANIFEST") or str(Path(directory) / "frozen_manifest.json")
+    digest = os.environ.get("PHISHING_MODEL_MANIFEST_SHA256", "")
+    required = bool(digest or os.environ.get("PHISHING_MODEL_MANIFEST") or os.environ.get("PHISHING_MODEL_DIR"))
+    blocked = False
+    try:
+        with st.spinner("Checking model availability…"):
+            model, meta = cached_model(directory, manifest, digest, required, model_revision(directory, manifest))
+    except ModelUnavailable:
+        LOGGER.warning("model_package_unavailable")
+        model, meta, blocked = None, None, True
+        st.error("The installed model is unavailable or could not be verified. Model predictions are disabled. "
+                 "You can still use the URL-only demo checks.")
+    if model is None and not blocked:
+        st.warning("ML model not installed. Showing **heuristic-only demo**; model predictions are unavailable.")
+    elif model is None:
+        st.caption("URL-only demo mode is active. No model prediction will be shown.")
     else:
-        st.success("URL ML model loaded")
-        st.caption("Model performance is dataset-specific. See models/url_model_meta.json after training.")
+        st.success("Model package verified")
+        st.caption("Model results are dataset-specific research estimates and may be wrong.")
     with st.form("scan"):
         user_url = st.text_input("Website URL", placeholder="https://example.org/login")
         active = st.checkbox("Run live SSL/TLS, RDAP and HTML checks (contacts the website)", value=False)
-        st.caption("Live checks may contact the submitted website and RDAP service; do not enter private URLs.")
+        st.caption("Do not paste passwords, access tokens or private links. Live checks may contact the website "
+                   "and RDAP service. URL-only checks do not contact the submitted website.")
         clicked = st.form_submit_button("Analyze URL", type="primary", use_container_width=True)
     if not clicked:
         return
+    if not user_url.strip():
+        st.warning("Enter a website URL to analyze.")
+        return
     try:
-        result = analyze(user_url, model, meta, active=active)
+        with st.spinner("Analyzing URL…"):
+            try:
+                result = analyze(user_url, model, meta, active=active)
+            except ModelUnavailable:
+                LOGGER.warning("model_prediction_unavailable")
+                st.error("The model could not provide a prediction. Showing URL-only demo checks for this analysis. "
+                         "No model decision is available; you can retry later.")
+                result = analyze(user_url, active=active)
     except ValueError as exc:
         st.error(f"Invalid URL: {exc}")
+        return
+    except Exception:
+        LOGGER.error("analysis_unavailable")
+        st.error("Analysis could not be completed. Try again. No safety conclusion is available.")
         return
     col1, col2 = st.columns(2)
     ml = result["ml"]
