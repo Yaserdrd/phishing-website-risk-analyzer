@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "compiler": "uv 0.12.23",
+  "platform": "x86_64-unknown-linux-gnu",
+  "inputs": {
+    "requirements.txt": "cf7706abbcb3d0cd736dad7fcf6bbd6b44b52ebc40a83df3bd84fba8975bc2ff",
+    "requirements-train.txt": "fda76d6a00f188e174854db2e80aee8ce83cca12d59159afeae141ee024105d6",
+    "requirements-dev.txt": "979c514ef4bcf963e9e5f39fb4a0bd6bc2a857b38a527764da571feada5ee4c5"
+  },
+  "locks": {
+    "requirements/py310.lock": "69d194f438b01661bc0ea7ca868fe52a4c9c7d0807107a998a081cebe78a5ada",
+    "requirements/py311.lock": "3336e3b7a77be40d16d1df538bcd7348413a11f69bd2e1ab0bf903bd01ff4ff6",
+    "requirements/py312.lock": "7f68ef1635af2b0c79a08b310fc5c40a3fe2d1a9daf243204b6f52116d13df60"
+  }
+}
