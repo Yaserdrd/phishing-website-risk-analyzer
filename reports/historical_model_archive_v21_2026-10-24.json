@@ -1,0 +1,30 @@
+{
+  "status": "verified-retained-archive-not-serving-approved",
+  "original_artifact_id": 12385851453,
+  "original_run": 39684966827,
+  "original_source_commit": "09e52d9772aaaa863157f8db405302a89dfa1e89",
+  "release_id": 422602045,
+  "release_url": "https://github.com/Yaserdrd/phishing-website-risk-analyzer/releases/tag/untagged-0612355f14190d7cb760",
+  "draft": true,
+  "preservation_run": 40077416315,
+  "preservation_commit": "b26b3fd1184afda82b03c64a488bedd0d9a427c3",
+  "conclusion": "success",
+  "assets": [
+    {
+      "id": 671682605,
+      "name": "archive-identity.json",
+      "size": 681,
+      "digest": "sha256:ead5d79fc7ae40f6a1dc6edf2d27fb12e9e85945229a27f5441e54bfc9b9345a"
+    },
+    {
+      "id": 671682583,
+      "name": "uci-v21-original.zip",
+      "size": 1486901,
+      "digest": "sha256:380622aa45ab410cf6ae499e5c271c271f05c1329f0f9c0066404b1262f45fda"
+    }
+  ],
+  "readback_verified_by_workflow": true,
+  "deserialized": false,
+  "serving_approved": false,
+  "independent_backup_verified": false
+}

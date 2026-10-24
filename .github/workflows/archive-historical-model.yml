@@ -1,0 +1,27 @@
+name: Preserve historical model archive
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/preserve-historical-model-archive]
+    paths:
+      - '.github/workflows/archive-historical-model.yml'
+      - 'scripts/archive_historical_model.py'
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: preserve-historical-v21
+  cancel-in-progress: false
+jobs:
+  archive:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify original ZIP and retain unchanged assets in draft release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python scripts/archive_historical_model.py
