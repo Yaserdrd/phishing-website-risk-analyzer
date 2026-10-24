@@ -65,8 +65,9 @@ pickle can still execute Python; ownership and approval remain prerequisites.
 For retaining approved packages, offline smoke, atomic shell configuration and
 rollback, follow the [model release lifecycle](docs/MODEL_RELEASE_LIFECYCLE.md).
 These operator tools preserve package bytes and do not approve or retrain models.
-Actual historical artifact archival and real-package serving acceptance remain
-blocked as recorded there; no package is silently downloaded or promoted.
+The historical ZIP has been verified and retained in a draft archive with
+read-back checks. Real-package serving acceptance still needs independently
+approved build/environment evidence; no package is silently promoted.
 
 - Check Streamlit's local `/_stcore/health` endpoint, then submit a reserved URL
   such as `https://example.org/login` with live checks off. A healthy HTTP endpoint

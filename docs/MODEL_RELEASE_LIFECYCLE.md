@@ -97,21 +97,36 @@ with archive SHA-256
 This matches the [previously recorded digest](VERIFIED_RESULTS_V21_2026-10-21.md).
 Retention ends **2026-10-29 01:17 Europe/Istanbul** (2026-10-28 22:17 UTC).
 
-Metadata access worked, but the signed artifact-download endpoint returned
-HTTP 403, including the permitted retry. **No archive bytes were obtained, no
-release asset was uploaded, and no historical pickle was deserialized.** Do not
-treat an empty failed-download file as an archive. The archive digest records
-an expected ZIP identity; it is not a serving-manifest approval.
+Initial download requests returned HTTP 403. After the environment was published,
+the original ZIP downloaded successfully; its SHA-256 matches the recorded digest
+and its metadata equals the committed historical report. Direct release uploads
+then failed with HTTP 401 because local platform credentials did not authenticate
+on the upload host. No credentials were extracted or requested in chat.
 
-Required follow-up: restore access to GitHub Actions artifact download storage,
-download before expiry, verify the complete ZIP against the recorded digest,
-inspect member paths/sizes without executing pickle, and retain the unchanged
-ZIP on durable controlled storage with independent backup/approval records.
-Keep a draft archive separate from a public product release. Do not publish raw
-datasets, review records or model assets without the appropriate approval.
-An exact approved historical environment/UCI/model manifest is still unavailable;
-do not infer one from package versions in today's environment or retrain a
-replacement and call it the original. Real-package serving acceptance remains blocked.
+The repository-scoped [preservation workflow](../.github/workflows/archive-historical-model.yml)
+resolved upload authorization using the native temporary `GITHUB_TOKEN` with
+`actions: read` and `contents: write`. The
+[successful preservation/read-back run](https://github.com/Yaserdrd/phishing-website-risk-analyzer/actions/runs/40077416315)
+retained `uci-v21-original.zip` and `archive-identity.json` in
+[draft archive release 422602045](https://github.com/Yaserdrd/phishing-website-risk-analyzer/releases/tag/untagged-0612355f14190d7cb760).
+The ZIP is unchanged. Both assets were downloaded again and their full bytes
+verified. A second run retained matching assets without replacing them. See the
+[aggregate archive evidence](../reports/historical_model_archive_v21_2026-10-24.json).
+
+This draft has no Actions artifact retention deadline, but is editable/deletable
+by repository owners; retain an independent controlled backup. It is not a public
+product release, hardware-immutable storage or a serving approval. No pickle was
+executed and no model/threshold was changed. The workflow refuses a published
+release, altered source/artifact identities, mismatched assets, unexpected ZIP
+members and metadata differing from historical evidence. Cross-host download
+redirects strip authorization headers; tokens are sent only to HTTPS GitHub API
+and upload origins. It requires an existing draft release and never publishes it.
+
+An exact independently approved historical environment/UCI/model manifest is
+still unavailable. Archive integrity is now verified, but it cannot supply
+missing build/approval evidence. Do not infer that evidence from today's package
+versions or retrain a replacement and call it the original. Real-package serving
+acceptance remains blocked on that separate prerequisite.
 
 ## Software validation — 2026-10-24
 
@@ -129,3 +144,12 @@ shell quoting and the operator CLI summary. CLI help and diff whitespace checks
 passed. Existing UI/model/network regressions remain green. Neither a real
 approved package nor a running service/environment rollback was tested; those
 remain acceptance gates after access and independently approved inputs exist.
+
+Archive-preservation delivery: baseline 233 tests; final **248 tests passed on
+each of Python 3.10.22, 3.11.17 and 3.12.14**, plus compileall, pip check and lock
+identity checks. Fifteen archive regressions cover source identity, ZIP/metadata
+tampering, unexpected members, credential origin/redirect boundaries, draft-only
+retention, overwrite refusal, matching-asset reuse and failed read-back. Real
+preservation and remote read-back succeeded in the linked workflow; both runs
+kept the same asset IDs. Historical-run log download through the local proxy is
+still unavailable; no exact original environment is inferred from missing logs.

@@ -182,10 +182,14 @@ Release lifecycle delivery (2026-10-24): see
 approved package bytes without unpickling, verifies retained targets and performs
 offline smoke before switching shell configuration. It preserves existing
 serving configuration when validation fails and retains rollback packages.
-Historical artifact metadata/digest is still available, but its download storage
-returned HTTP 403 even on the permitted retry. No real archive, upload, approved
-historical environment or real-model smoke is claimed. Resolve access before
-the 2026-10-28 22:17 UTC expiry; the archive is not a serving approval.
+The initial artifact-download HTTP 403 was resolved after environment publication.
+Direct uploads returned HTTP 401; repository-scoped GitHub Actions authorization
+then preserved the unchanged original ZIP in a draft release and verified both
+assets by downloading them again. Preservation run `40077416315` passed; see
+[archive evidence](../reports/historical_model_archive_v21_2026-10-24.json).
+The preserved copy has no Actions expiry. Independent backup, historical
+environment/UCI/model approval and real-model/service smoke remain open; archive
+integrity does not establish a serving approval.
 Baseline/final checks on Python 3.10.22, 3.11.17 and 3.12.14: 214 -> 233 tests
 passed on each, with final compileall, pip check and lock identity checks passing.
 All 19 new cases use safe fake packages; actual package/service rollback remains
