@@ -38,6 +38,10 @@ jobs:
         run: python scripts/train_model.py --csv data/phiusiil_urls.csv
       - name: Print and validate saved report
         run: python scripts/verify_report.py models/url_model_meta.json
+      - name: Record candidate source, data and runtime identities without approving serving
+        run: |
+          python scripts/record_model_build.py --model-dir models \
+            --uci-csv data/phiusiil_urls.csv --out models/build_evidence.json
       - name: Publish reproducible report + model files as workflow artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -45,5 +49,6 @@ jobs:
           path: |
             models/url_model_meta.json
             models/url_phishing_model.pkl
+            models/build_evidence.json
           if-no-files-found: error
           retention-days: 7

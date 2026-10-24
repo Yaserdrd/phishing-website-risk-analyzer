@@ -31,6 +31,7 @@ external-validation/deployment blockers. See the eight-area
 | `src/phishing_analyzer/model.py` | URL/hostname character TF-IDF + Logistic Regression | Exact binary labels checked before conversion; fit/split/threshold algorithms unchanged |
 | `src/phishing_analyzer/serving.py` | Approved serving package and inference output contract | Missing installation is demo; invalid/configured-missing package blocks predictions; trusted manifest required before unpickling |
 | `src/phishing_analyzer/releases.py`, `scripts/model_release.py` | Operator-only package retention, offline smoke and reversible shell config | Bounded verified snapshots; no overwrite; activation smoke before atomic config switch; persistent storage/approval and process restart remain operator responsibilities |
+| `src/phishing_analyzer/build_evidence.py`, `scripts/record_model_build.py` | Candidate build source/data/runtime identities | Explicitly not serving approval; normal training workflow retains evidence for future authorized builds |
 | `src/phishing_analyzer/protocol.py`, `provenance.py` | Shared UTC policy and frozen artifact verification | Approved manifest trust anchor required; a digest does not authenticate its supplier |
 | `src/phishing_analyzer/analyzer.py` | Combine ML, heuristics, optional checks | Legacy `risk_level` retained for callers as a score band; UI does not present it as a verdict |
 | `src/phishing_analyzer/security.py` | Lexical, TLS, RDAP, bounded HTML signals | Opt-in network code; hardening gaps listed below |
@@ -194,6 +195,19 @@ Baseline/final checks on Python 3.10.22, 3.11.17 and 3.12.14: 214 -> 233 tests
 passed on each, with final compileall, pip check and lock identity checks passing.
 All 19 new cases use safe fake packages; actual package/service rollback remains
 unverified. Model/threshold/UI/network implementations and dependencies unchanged.
+
+The subsequent [build evidence delivery](MODEL_BUILD_EVIDENCE.md) recovered
+historical job logs (CPython 3.11.17 and 51 installed versions) and ran a bounded,
+offline diagnostic of the verified original model under the existing locked
+3.11.17 environment. Real deserialization and a reserved-URL output contract
+passed. Three observed dependencies differ; original runtime reproduction,
+approved serving manifest verification and running-service rollback remain
+unverified. A clean historical-version setup was blocked by PyPI network access;
+required package hosts were saved to the environment draft, not applied here.
+Normal future training now captures candidate build evidence without granting
+approval. Baseline/final: 248 -> 262 tests passed on each of Python 3.10.22,
+3.11.17 and 3.12.14, plus final compilation, pip check and lock checks. No model,
+threshold or final evaluation data changed and no full training was run.
 
 The cutoff remains **2026-10-23 00:00 UTC** (03:00 Europe/Istanbul). Calendar
 eligibility does not establish enough qualifying samples or authorize repeated

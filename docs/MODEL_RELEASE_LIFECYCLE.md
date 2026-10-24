@@ -151,5 +151,7 @@ identity checks. Fifteen archive regressions cover source identity, ZIP/metadata
 tampering, unexpected members, credential origin/redirect boundaries, draft-only
 retention, overwrite refusal, matching-asset reuse and failed read-back. Real
 preservation and remote read-back succeeded in the linked workflow; both runs
-kept the same asset IDs. Historical-run log download through the local proxy is
-still unavailable; no exact original environment is inferred from missing logs.
+kept the same asset IDs. Subsequently the job-specific log endpoint worked;
+the [build-evidence follow-up](MODEL_BUILD_EVIDENCE.md) records observed versions
+and a real offline research compatibility probe. It does not establish an exact
+original environment or independently approved serving manifest.
