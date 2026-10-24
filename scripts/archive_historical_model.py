@@ -34,14 +34,14 @@ class SafeRedirect(urllib.request.HTTPRedirectHandler):
         return redirected
 
 
-def request(url, token, *, data=None, media="application/json"):
+def request(url, token, *, data=None, media="application/json", accept="application/vnd.github+json"):
     parsed = urllib.parse.urlsplit(url)
     host = parsed.hostname
     if (parsed.scheme != "https" or parsed.username or parsed.password or parsed.port not in (None, 443)
             or host not in {"api.github.com", "uploads.github.com"}):
         raise ValueError("Credentials may only be sent to GitHub API/upload hosts")
     req = urllib.request.Request(url, data=data, headers={
-        "Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {token}", "Accept": accept,
         "Content-Type": media, "User-Agent": "PhishingResearchArchive/1.0",
         "X-GitHub-Api-Version": "2022-11-28",
     })
@@ -110,6 +110,10 @@ def preserve(token, metadata_reference):
     for name, (digest, size) in expected_assets.items():
         if name not in retained or retained[name].get("digest") != digest or retained[name]["size"] != size:
             raise ValueError("Final release does not retain the verified asset")
+        downloaded = request(API + f'/releases/assets/{retained[name]["id"]}', token,
+                             accept="application/octet-stream")
+        if "sha256:" + hashlib.sha256(downloaded).hexdigest() != digest or len(downloaded) != size:
+            raise ValueError("Retained asset read-back mismatch")
     return {"release_id": final["id"], "draft": True, "archive_sha256": DIGEST,
             "deserialized": False, "serving_approved": False}
 

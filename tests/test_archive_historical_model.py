@@ -69,14 +69,14 @@ def test_credentials_never_sent_to_unapproved_origins(url):
         archive.request(url, 'sentinel')
 
 
-@pytest.mark.parametrize('condition', ['good', 'expired', 'source', 'published', 'wrong_asset'])
+@pytest.mark.parametrize('condition', ['good', 'expired', 'source', 'published', 'wrong_asset', 'readback'])
 def test_preserve_draft_and_fail_closed(raw, monkeypatch, condition):
-    assets, uploads = [], []
+    assets, uploads, stored = [], [], {}
     release = {'id': 1, 'draft': condition != 'published', 'tag_name': archive.TAG,
                'upload_url': 'https://uploads.github.com/assets{?name}', 'assets': assets}
     if condition == 'wrong_asset':
         assets.append({'name': 'uci-v21-original.zip', 'digest': 'sha256:wrong', 'size': 0})
-    def request(url, token, *, data=None, media=None):
+    def request(url, token, *, data=None, media=None, accept=None):
         assert token == 'sentinel'
         if url.endswith(f'/actions/artifacts/{archive.ARTIFACT}'):
             return json.dumps({'expired': condition == 'expired', 'digest': 'sha256:' + archive.DIGEST,
@@ -86,10 +86,14 @@ def test_preserve_draft_and_fail_closed(raw, monkeypatch, condition):
         if url.startswith('https://uploads.github.com'):
             uploads.append(url)
             asset = {'name': url.split('?name=')[1], 'size': len(data),
-                     'digest': 'sha256:' + hashlib.sha256(data).hexdigest()}
+                     'digest': 'sha256:' + hashlib.sha256(data).hexdigest(), 'id': len(assets) + 1}
             assets.append(asset)
+            stored[asset['id']] = data
             return json.dumps(asset).encode()
         if url.endswith('/releases/1'): return json.dumps(release).encode()
+        if '/releases/assets/' in url:
+            assert accept == 'application/octet-stream'
+            return b'corrupt readback' if condition == 'readback' else stored[int(url.rsplit('/', 1)[1])]
         pytest.fail('Unexpected URL')
     monkeypatch.setattr(archive, 'request', request)
     if condition == 'good':
@@ -99,4 +103,4 @@ def test_preserve_draft_and_fail_closed(raw, monkeypatch, condition):
         assert len(uploads) == 2  # exact matching assets are retained without replacement
     else:
         with pytest.raises(ValueError): archive.preserve('sentinel', {'version': '2.1.0'})
-        assert not uploads
+        assert len(uploads) == 2 if condition == 'readback' else not uploads
