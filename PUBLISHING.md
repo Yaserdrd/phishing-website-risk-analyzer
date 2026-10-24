@@ -16,9 +16,10 @@ PYTHONPATH=src .venv/bin/python -m pytest -q
 .venv/bin/python -m streamlit run app.py --server.headless=true --browser.gatherUsageStats=false
 ```
 
-On Windows use `.venv\Scripts\python.exe`. Production dependency/image pinning
-is an open milestone; these range-based requirements are not a reproducible
-release lock. Live checks must remain off during routine smoke testing.
+On Windows use `.venv\Scripts\python.exe`. For verified Linux x86_64 dependency
+installation, use the [hash-locked environments](docs/REPRODUCIBLE_ENVIRONMENTS.md)
+instead of the flexible range-based example above. OS/image and historical
+artifact reproducibility remain open. Live checks stay off during smoke testing.
 
 ## Three model states
 
@@ -60,6 +61,12 @@ These are not decompression, CPU or process-memory isolation guarantees. A trust
 pickle can still execute Python; ownership and approval remain prerequisites.
 
 ## Smoke checks and recovery
+
+For retaining approved packages, offline smoke, atomic shell configuration and
+rollback, follow the [model release lifecycle](docs/MODEL_RELEASE_LIFECYCLE.md).
+These operator tools preserve package bytes and do not approve or retrain models.
+Actual historical artifact archival and real-package serving acceptance remain
+blocked as recorded there; no package is silently downloaded or promoted.
 
 - Check Streamlit's local `/_stcore/health` endpoint, then submit a reserved URL
   such as `https://example.org/login` with live checks off. A healthy HTTP endpoint
