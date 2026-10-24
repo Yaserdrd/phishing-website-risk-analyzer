@@ -29,6 +29,8 @@ python scripts/download_uci.py
 # put its model + metadata under models/ (never load untrusted pickles).
 PYTHONPATH=src python scripts/evaluate_vetted_holdout.py \
   --vetted-csv /secure/reviewed_urls.csv \
+  --reviews /secure/reviews.csv \
+  --reviews-sha256 "$APPROVED_REVIEWS_SHA256" \
   --uci-csv data/phiusiil_urls.csv \
   --model-dir models \
   --manifest /secure/frozen_manifest.json \
@@ -45,7 +47,12 @@ metadata, UCI input and runtime before evaluation. Creating a new hash around an
 untrusted pickle does not make it trusted. Version `2.1.0` alone is insufficient.
 The UCI CSV and model paths above must match the approved manifest. Reviewers and
 evaluation input must use the shared explicit-UTC ordering rule through the fixed
-cutoff and captured evaluation time; actual two-reviewer provenance enforcement
-remains separate work.
+cutoff and captured evaluation time. The original private reviews and independently
+approved review digest are also mandatory. The evaluator recomputes dual-review
+consensus and requires the vetted CSV's exact bytes to match before loading the
+model. Generate that CSV with `review_consensus.py`; single-review CSVs alone
+are no longer accepted. See the [approval and private-storage workflow](INDEPENDENT_REVIEW_PROTOCOL.md).
+Digests bind bytes, not evidence truth or authenticated human independence.
+Reports refuse to overwrite existing files or inputs.
 
 **Limitations:** minimum class count is an engineering gate, not a confidence guarantee. Curated selection cannot by itself establish real-world prevalence or predictive calibration. This evaluator must not be used repeatedly to choose a new model; collect another independent holdout for subsequent versions.

@@ -17,12 +17,20 @@ from phishing_analyzer.model import predict
 from phishing_analyzer.provenance import evaluation_code_identity, load_verified_model
 from phishing_analyzer.protocol import CUTOFF, evaluation_time, parse_time, valid_window
 from phishing_analyzer.urls import domain_group, normalize_url
+from phishing_analyzer.private_files import read_private
+from review_consensus import approved_consensus
 
 CLASSES = ('PHISHING', 'UNCERTAIN', 'LEGITIMATE')
 REQUIRED = {'url', 'label', 'observed_at_utc', 'verified_at_utc', 'evidence_ref', 'reviewer_id'}
 
 
 def load_vetted(path, excluded_domains, *, cutoff=CUTOFF, min_per_class=100, now=None):
+    """Low-level schema check; the evaluation CLI additionally requires approved consensus."""
+    return load_vetted_bytes(read_private(path), excluded_domains, cutoff=cutoff,
+                             min_per_class=min_per_class, now=now)
+
+
+def load_vetted_bytes(data, excluded_domains, *, cutoff=CUTOFF, min_per_class=100, now=None):
     """Reject missing evidence, untrusted labels, duplicates, and domain overlap.
 
     Never silently discard invalid evidence: a broken corpus is not a valid holdout.
@@ -35,7 +43,6 @@ def load_vetted(path, excluded_domains, *, cutoff=CUTOFF, min_per_class=100, now
     rows = []
     seen_urls = set()
     domain_labels = {}
-    data = Path(path).read_bytes()
     if len(data) > 20_000_000:
         raise ValueError('Vetted corpus too large')
     from io import StringIO
@@ -43,6 +50,8 @@ def load_vetted(path, excluded_domains, *, cutoff=CUTOFF, min_per_class=100, now
     if not REQUIRED.issubset(set(reader.fieldnames or [])):
         raise ValueError('Required evidence columns missing')
     for i, record in enumerate(reader, start=2):
+        if None in record or any(record.get(key) is None for key in REQUIRED):
+            raise ValueError(f'Row {i}: malformed evidence columns')
         label = record['label'].strip().upper()
         if label not in ('PHISHING', 'LEGITIMATE'):
             raise ValueError(f'Row {i}: unsupported label')
@@ -100,6 +109,8 @@ def evaluate(records, model, meta):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--vetted-csv', required=True)
+    parser.add_argument('--reviews', required=True, help='Private individual-review CSV used to build consensus')
+    parser.add_argument('--reviews-sha256', required=True, help='Review digest approved independently before model scoring')
     parser.add_argument('--uci-csv', required=True)
     parser.add_argument('--model-dir', default='models')
     parser.add_argument('--manifest', required=True)
@@ -111,10 +122,17 @@ def main():
     current = evaluation_time()
     if current < CUTOFF:
         parser.error('Prospective cutoff has not yet arrived')
+    destination = Path(args.out).resolve()
+    inputs = [args.vetted_csv, args.reviews, args.uci_csv, args.manifest,
+              Path(args.model_dir) / 'url_phishing_model.pkl', Path(args.model_dir) / 'url_model_meta.json']
+    if destination.exists() or destination in [Path(path).resolve() for path in inputs]:
+        parser.error('Report must be new and must not overwrite an input')
+    data, review_provenance = approved_consensus(
+        args.reviews, args.vetted_csv, args.reviews_sha256, now=current)
+    records, provenance = load_vetted_bytes(data, uci_groups(args.uci_csv), min_per_class=args.min_per_class, now=current)
     model, meta, identity = load_verified_model(args.model_dir, args.uci_csv, args.manifest, args.manifest_sha256)
-    records, provenance = load_vetted(args.vetted_csv, uci_groups(args.uci_csv), min_per_class=args.min_per_class, now=current)
     result = {
-        'protocol': 'prospective-vetted-two-class-v1',
+        'protocol': 'prospective-vetted-two-class-v2',
         'preregistered_cutoff_utc': CUTOFF.isoformat(),
         'model_version': meta['version'],
         'frozen_training_commit': identity['training_commit'],
@@ -122,6 +140,7 @@ def main():
         'evaluation_code': evaluation_code_identity(ROOT),
         'evaluated_at_utc': current.isoformat(),
         'corpus': provenance,
+        'review_provenance': review_provenance,
         'metrics': evaluate(records, model, meta),
         'limitations': [
             'Labels require evidence-backed human review. Script validates metadata presence, NOT truth of reviewer claims.',
@@ -130,9 +149,9 @@ def main():
             'Never tune the frozen model on this final holdout.',
         ],
     }
-    destination = Path(args.out)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
+    with destination.open('x', encoding='utf-8') as handle:
+        handle.write(json.dumps(result, indent=2) + '\n')
     print(json.dumps(result, indent=2))
 
 

@@ -98,3 +98,27 @@ screen-reader/contrast compliance, Windows/macOS setup, production hosting and
 representative latency/concurrency remain unverified. A real approved v2.1 serving
 artifact was not loaded; model checks used safe fake artifacts. Remaining scientific,
 review-provenance, reproducibility and public-exposure acceptance gates stay open.
+
+## Subsequent delivery: mandatory review provenance
+
+PRs #9–#13 have since been merged into `main` at `4647825`; that merged
+commit passed the three-version CI. The next focused change addresses the
+review-provenance acceptance item above:
+
+- The vetted evaluation CLI requires original private reviews and a digest
+  approved independently before scoring, recomputes two-reviewer consensus,
+  and matches the exact vetted bytes before loading/scoring the model.
+- The verified buffers are used directly. A fabricated joined reviewer field,
+  single reviewer, disagreement or modified accepted CSV cannot substitute
+  for the approved individual records. Reports include aggregate provenance.
+- Review inputs and private CSV outputs reject checkout/symlink destinations;
+  outputs are exclusively created and cannot overwrite inputs or prior files.
+- This gate does not prove evidence truth, authenticate reviewers, collect a
+  real corpus or establish model performance. External approval and independent
+  evidence checks remain necessary. No training/threshold/UI change is included.
+
+The prior 191-test baseline is retained at the unchanged merged commit; a fresh
+pre-edit Python 3.12 run also passed 191 tests. Regression tests cover approved
+end-to-end CLI output, missing/wrong approval, changed review/CSV bytes, single
+reviews, disputes, early failure before model loading, private paths/symlinks,
+and overwrite prevention. Three-version final results are recorded in project status.

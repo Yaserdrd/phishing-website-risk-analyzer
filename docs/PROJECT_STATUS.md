@@ -9,6 +9,13 @@ as described below. Model implementation and thresholds remain **v2.1.0**.
 The environment supports development and testing. This does not establish
 real-world detection quality or deployment security. See [agent instructions](../AGENTS.md).
 
+PRs #9–#13 were merged in order into `main` at `4647825` on 2026-10-23.
+The merged tree equals the tested `12ee238` delivery. All 191 tests, source
+compilation and pip check passed locally on Python 3.10/3.11/3.12; the
+[merged-main CI](https://github.com/Yaserdrd/phishing-website-risk-analyzer/actions/runs/39996330597)
+also passed all three versions. That completed integration acceptance; no model
+training, threshold changes or production deployment occurred.
+
 The subsequent `feature/trusted-serving-and-recovery` delivery implements a
 verified serving entry point, guarded probability contract and recoverable UI
 states. It does not retrain/change v2.1, approve a real model artifact or remove
@@ -23,13 +30,14 @@ external-validation/deployment blockers. See the eight-area
 | `src/phishing_analyzer/urls.py` | Normalization, validation, registrable-domain grouping | Shared train/inference normalization; bundled offline PSL |
 | `src/phishing_analyzer/model.py` | URL/hostname character TF-IDF + Logistic Regression | Exact binary labels checked before conversion; fit/split/threshold algorithms unchanged |
 | `src/phishing_analyzer/serving.py` | Approved serving package and inference output contract | Missing installation is demo; invalid/configured-missing package blocks predictions; trusted manifest required before unpickling |
+| `src/phishing_analyzer/releases.py`, `scripts/model_release.py` | Operator-only package retention, offline smoke and reversible shell config | Bounded verified snapshots; no overwrite; activation smoke before atomic config switch; persistent storage/approval and process restart remain operator responsibilities |
 | `src/phishing_analyzer/protocol.py`, `provenance.py` | Shared UTC policy and frozen artifact verification | Approved manifest trust anchor required; a digest does not authenticate its supplier |
 | `src/phishing_analyzer/analyzer.py` | Combine ML, heuristics, optional checks | Legacy `risk_level` retained for callers as a score band; UI does not present it as a verdict |
 | `src/phishing_analyzer/security.py` | Lexical, TLS, RDAP, bounded HTML signals | Opt-in network code; hardening gaps listed below |
 | `src/phishing_analyzer/network.py` | Public-IP-pinned transport, resource bounds and shared deadlines | Direct sockets; no RDAP redirects; bounded DNS workers may outlive caller timeouts |
 | `scripts/evaluate_external.py` | Separate-source audit and paired URL/root diagnostics | Exploratory; no inherited ground truth for synthetic roots |
 | `scripts/prospective_holdout.py` | Post-cutoff positive-only evaluation | Explicit UTC/order/current-time filtering and pre-unpickle identity gate |
-| `scripts/evaluate_vetted_holdout.py` | Evidence-reviewed two-class evaluation | Metadata validation does not verify evidence truth or mandatory dual review |
+| `scripts/evaluate_vetted_holdout.py` | Evidence-reviewed two-class evaluation | Requires approved original review bytes and recomputed consensus before loading/scoring; evidence truth remains a human responsibility |
 | `scripts/review_consensus.py` | Offline two-reviewer agreement | Distinct IDs and agreement cannot prove actual independence |
 | `notebooks/experiments.ipynb` | Historical UCI 327 numeric-feature experiments | Separate from the UCI 967 URL application |
 
@@ -138,14 +146,50 @@ code-review observations.
 | R3 / P0, resolved | Shared UTC parser and cutoff <= observation/submission <= verification <= captured evaluation time rule used by both evaluators and review consensus. Invalid feed records cannot satisfy minimum counts. | Fixed-clock tests cover naive/non-UTC, future, reversed, cutoff and evaluation-time boundaries. |
 | R4 / P0, resolved | CSV labels are checked with exact decimal semantics before integer conversion; fractions, infinities, underflow and near-integer rounding are rejected. | Invalid-label and valid binary cleaning tests pass; fitting, splitting and thresholds are unchanged. |
 | R5 / P1, transport implemented; deployment controls pending | Shared 12-second network budget, bounded DNS wait/capacity, public-unicast pinning, revalidated HTML redirects with no HTTPS downgrade, bounded identity-only responses, and fixed RDAP endpoint without redirects. Missing network evidence adds no risk. | Offline adversarial tests cover redirect/SSRF, pinning/TLS, slow headers/body/chunks, wire/body bounds and cleanup. Registry redirects now leave age unavailable. External egress isolation, rate limits and deployment validation remain required. |
-| R6 / P1, evaluation prerequisite | Evaluator accepts nonempty single reviewer IDs; consensus output is not a mandatory input gate. Private output location is a documented convention. | Bind evaluation to reviewed consensus provenance and prevent private outputs in the checkout; retain independent human evidence verification. |
-| R7 / P1 | Dependency ranges, changing feeds/PSL and short-lived artifacts limit repeatability. Some older documents contain pre-verification status text. | Reproducible dependency resolution and experiment manifests; reconcile status with durable aggregate evidence. |
+| R6 / P1, software gate implemented | Evaluator requires approved raw review digest, recomputes dual-review consensus and compares exact vetted bytes before model loading/scoring. Private review/CSV paths reject checkout and symlink destinations; outputs refuse overwrite. | Offline tampering, single-review, dispute, private-path and CLI regressions; real independent identity/evidence approval and corpus collection remain required. Digests do not authenticate reviewers. |
+| R7 / P1, dependency locks validated; artifact lifecycle open | Linux x86_64 locks pin the complete development/research graph separately for Python 3.10/3.11/3.12 with package hashes. CI/research installs now require hashes and wheels, check lock/input identities and pip consistency. External data, interpreter/OS and short-lived model artifacts remain separate reproducibility risks. | Fresh locked environments passed all tests; retain immutable approved model/data/environment identities and rollback before real-package serving acceptance. See [locked environments](REPRODUCIBLE_ENVIRONMENTS.md). |
+
+The subsequent `feature/enforced-review-provenance` change implements R6's
+software gate. The vetted evaluator requires `--reviews` and an independently
+approved `--reviews-sha256`, recomputes consensus from the verified original
+bytes, and compares the exact generated CSV before model loading/scoring.
+Its v2 aggregate report records review/consensus provenance without reviewer IDs,
+evidence references or URLs. Private CSV paths are rejected inside the checkout
+and resolved symlink targets; existing outputs are not overwritten. This is a
+storage-mistake guard, not a hostile-filesystem sandbox or reviewer authentication.
+Human evidence approval, blind real-corpus collection and external final
+evaluation remain open. No real review corpus or final model experiment was used.
+
+R6 validation: the unchanged merged baseline already passed 191 tests on all
+three Python versions locally and in CI; a fresh pre-edit Python 3.12 run passed
+191 tests. After this change, **211 tests passed on each of Python 3.10.22,
+3.11.17 and 3.12.14**, with successful compileall and pip check on each.
+The 20 added offline regressions cover approved aggregate output, missing or
+changed approval, review/CSV tampering, joined/single reviewer bypasses,
+disagreement, minimum sample gates before model loading, private checkout and
+symlink paths, and overwrite refusal. Both CLI help entry points passed.
+Existing UI/network/model regressions remain green; no fresh browser session
+was needed because their implementation was unchanged.
 
 Domain-level conflicting-label exclusion can remove genuinely compromised paths
 on otherwise legitimate domains. Report that selection bias, source-order sampling,
 review disagreements, domain clustering and class prevalence in future studies.
 
 ## Prospective evaluation state
+
+Release lifecycle delivery (2026-10-24): see
+[model retention and rollback](MODEL_RELEASE_LIFECYCLE.md). Software stages exact
+approved package bytes without unpickling, verifies retained targets and performs
+offline smoke before switching shell configuration. It preserves existing
+serving configuration when validation fails and retains rollback packages.
+Historical artifact metadata/digest is still available, but its download storage
+returned HTTP 403 even on the permitted retry. No real archive, upload, approved
+historical environment or real-model smoke is claimed. Resolve access before
+the 2026-10-28 22:17 UTC expiry; the archive is not a serving approval.
+Baseline/final checks on Python 3.10.22, 3.11.17 and 3.12.14: 214 -> 233 tests
+passed on each, with final compileall, pip check and lock identity checks passing.
+All 19 new cases use safe fake packages; actual package/service rollback remains
+unverified. Model/threshold/UI/network implementations and dependencies unchanged.
 
 The cutoff remains **2026-10-23 00:00 UTC** (03:00 Europe/Istanbul). Calendar
 eligibility does not establish enough qualifying samples or authorize repeated
@@ -155,8 +199,8 @@ report is recorded in the current checkout.
 Keep raw URLs and review evidence outside Git, blind reviewers to model scores,
 verify evidence independently, and supply a trusted approved manifest/environment
 through the R2 gate before a frozen positive holdout run. The gate does not
-retrospectively approve historical artifacts. Resolve R6 before claiming an
-enforced dual-review evaluation.
+retrospectively approve historical artifacts. R6 now enforces review-byte approval
+and recomputed agreement in the evaluation CLI, not human identity or label truth.
 Minimum counts are engineering gates, not statistical confidence guarantees.
 
 ## Ordered delivery plan
@@ -179,10 +223,12 @@ tests where behavior changes, and Python 3.10/3.11/3.12 checks.
    tests and bounded public-IP-pinned transport cover opt-in live checks. See
    [security notes](../SECURITY.md) for RDAP availability, DNS cancellation,
    direct-socket and deployment-isolation limitations. No live site was visited.
-5. **P1: reproducibility (R7).** Record dependency, PSL, source and artifact
-   identities; version report schemas and preserve aggregate evidence durably.
-6. **P1: reviewed holdout process (R6).** Enforce consensus provenance and private
-   outputs; collect and verify data under a blind, preregistered protocol, then
+5. **P1: reproducibility (R7), dependency locks validated.** Linux x86_64
+   Python 3.10–3.12 locked installations are tested; durable approved model/data
+   storage, interpreter/OS identity, rollback and real serving acceptance remain open.
+6. **P1: reviewed holdout process (R6), software gate implemented.** Approved
+   review bytes, recomputed consensus and private-path checks are enforced;
+   collect and verify data under a blind, preregistered protocol, then
    conduct a separately scoped final evaluation without tuning on its outcomes.
 7. **P2: next model research.** Investigate input-shape, source and temporal
    shift on separate development/validation corpora. Pre-register hypotheses
